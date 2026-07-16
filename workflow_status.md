@@ -24,7 +24,7 @@
 
 - 技术与入口：单技能 Agent Skills 仓库；入口为 `skills/production-delivery-orchestrator/SKILL.md`，附 Python 安装器和 GitHub/npx 安装说明。
 - 相关模块：`SKILL.md`、`references/`、`agents/openai.yaml`、`scripts/install_skill.py`、`evals/production-delivery-orchestrator/`、`README.md`。
-- 工作区状态：基线 `b3d9a17`；当前有未提交候选改动，均属于本任务，尚未推送。
+- 工作区状态：已发布版本为 `abb0e0d`；当前 completion-audit 批次包含未提交的分析文档、安全加固、测试和报告更新。
 - 关键约束：核心渐进披露；同批 baseline/candidate 评测；只读 Critic；不把未执行检查写成通过。
 - 重大假设及反转条件：当前仓库只发布一个技能；若安装器或 `npx skills` 真实行为与 README 不符，必须以运行结果修正文档。
 
@@ -33,23 +33,30 @@
 | ID | 节点目标 | 状态 | 依赖 | 文件/模块 | 验收标准 | 验证方式 | 证据引用 | 回滚 |
 |---|---|---|---|---|---|---|---|---|
 | N1 | 主仓库、参考技能和规则冲突审查 | passed | - | 全仓库、参考技能根目录 | 给出证据化 P0/P1/P2 与高价值参考 | 三个独立只读 Agent | Agent 审查回传 | 保留 `b3d9a17` |
-| N2 | 轻量核心状态机与按需路由 | passed | N1 | `SKILL.md`、`openai.yaml`、长协议入口 | 默认不全文加载长协议；触发边界清晰 | 官方结构验证、字符量、eval | `SKILL.md` 轻量且默认上下文代理较基线下降 78.5% | 回退单组规则并复测 |
+| N2 | 轻量核心状态机与按需路由 | passed | N1 | `SKILL.md`、`openai.yaml`、长协议入口 | 默认不全文加载长协议；触发边界清晰 | 官方结构验证、字符量、eval | `SKILL.md` 轻量且当前默认上下文代理较基线下降 77.2% | 回退单组规则并复测 |
 | N3 | 模块化发现、结果、计划、执行、验证、审查和状态契约 | passed | N1 | `references/` | 每个契约单一职责、中文、无 CLI 强绑定 | diff check、引用完整性、两次 forward-test | 八个按需 reference 均可解析 | 逐模块回退 |
 | N4 | 可执行离线评测与视频任务 fixture | passed | N1 | `evals/production-delivery-orchestrator/` | 静态映射不冒充场景执行；真实 Git 基线；真实 forward-test 可追溯 | runner 自测、baseline/candidate、坏候选、forward harness/记录 | 静态状态为 COVERED/UNCOVERED；报告含 SHA-256；真实记录校验通过 | 保留 `cases.yaml` 与 Git 基线 |
 | N5 | 跨 CLI 安装器与全面中文 README | passed | N2 | `README.md`、`install_skill.py`、安装测试、CI | 真实临时安装、重复保护、引用完整性和七类桥接通过 | 4 个 stdlib 集成测试；Windows/Linux CI 配置 | 实装、force、越界拒绝、不完整源和文件目标保护均通过 | 备份改名与恢复 |
 | N6 | 主线程初步整合与验证 | passed | N2,N3 | 全仓库 | 结构、YAML、安装、eval、远程发现和两次 forward-test有实际证据 | 实际命令和退出码 | 初验完成；Critic 发现评测表述与 CI 覆盖缺口 | 按失败证据最小修复 |
 | N7 | 独立 Critic 审查、主线程修复、原 Critic 复验 | passed | N6 | 当前 diff 与验证证据 | 六维审查通过，P0/P1 为零 | 独立只读 Agent | 原 Critic 复验 F1-F5 全部 Closed，Verdict Approve | 仅修复已确认问题 |
 | N8 | 提交并推送 GitHub | passed | N7 | Git 历史与远程 | 提交成功、远程 main 可见 | git status/log/remote、远程发现、云端 CI | 功能提交 `0cf30f2` 已推送；Ubuntu/Windows CI 成功；npx 发现新 description | 不改写历史 |
+| N9 | 严格 1–9 项目识别与参考对标报告 | passed | N8 | `docs/` | 主项目、参考筛选、差距、迁移、路线图、实施和未知项均有证据 | 文档结构、路径和需求矩阵检查 | `docs/project-benchmark-analysis.md`、`docs/reference-scan-report.md` | 删除本批文档 |
+| N10 | 安装器与 forward/eval 证据安全加固 | in_progress | N9 | installer、forward、eval、tests、CI | symlink 不越界、报告脱敏、记录强校验、legacy 不代打 | 8 项安装测试、6 项 forward 测试、eval 三类 self-test | 子 Agent 已初验，等待主线程全套复验 | 回退本批脚本和测试 |
+| N11 | 持久化独立 Critic、修复复验和再次发布 | pending | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | 待执行 | 不改写历史 |
 
 ## 风险与决策
 
 | ID | 风险或决策 | 等级 | 依据 | 处理方式 | 状态 |
 |---|---|---|---|---|---|
-| R1 | 默认全文加载约 1,556 行长协议 | P0 | 与本地轻量 prompt 规则和渐进披露冲突 | 长协议降为显式/专项兼容层 | 已解决；默认上下文代理下降 78.5% |
+| R1 | 默认全文加载约 1,556 行长协议 | P0 | 与本地轻量 prompt 规则和渐进披露冲突 | 长协议降为显式/专项兼容层 | 已解决；当前默认上下文代理下降 77.2% |
 | R2 | `description` 过宽并承载完整工作流 | P1 | 可能过度触发并让模型跳过正文 | 改为触发场景和负向边界 | 已解决；正负触发代理通过 |
 | R3 | eval 只有 YAML 清单，无法执行 | P0 | 无 runner、rubric、fixture 和非零失败 | 建立离线 runner 与对照报告 | 已解决 |
 | R4 | 桥接要求所有软件请求全文加载 | P0 | 污染项目上下文并冲突其他规则 | 改成轻量路由和按需加载 | 已解决 |
 | R5 | 静态评测不能证明真实模型行为 | P1 | 结构合规不等于执行有效 | 静态映射改为 COVERED/UNCOVERED；增加真实记录和可配置 forward harness | 已解决，保留模型版本未知限制 |
+| R6 | 目标要求的 1–9 分析未持久化 | P0 | 既有 README/workflow 不能替代完整对标输出 | 新增项目分析和参考扫描报告 | 已解决，待 Critic |
+| R7 | 标准桥接可经 symlink 写出项目边界 | P1 | 标准路径未统一安全解析 | 标准/custom bridge 统一 resolve + 回归测试 | 已实施，待全套复验 |
+| R8 | Forward 报告可能泄露 Secret，记录校验过弱 | P1 | command/stdout/stderr 原样持久化 | 递归脱敏、固定 case Schema、timeout 结构化 | 已实施，待全套复验 |
+| R9 | 静态 capability 可能由默认不可达 legacy 代打 | P2 | capability 曾扫描全部 references | 使用 routed capability text；baseline 强制 legacy 例外 | 已实施，待全套复验 |
 
 ## 验证台账
 
@@ -57,12 +64,25 @@
 |---|---|---|---|---|---|---|
 | V1 | N1 | 三个 Agent 分别审查主仓库、13,018 个参考技能和规则/评测冲突 | passed | 本轮 | 新鲜 | 结论尚需实现验证 |
 | V2 | N2,N3 | 官方 `quick_validate.py`、引用存在性、YAML 解析、`git diff --check` | passed | 本轮核心与契约改动后 | 新鲜 | Critic 修复后需重跑 |
-| V3 | N2 | 真实 Git 基线对照：默认强制上下文代理下降 78.5% | passed | `b3d9a17` vs 当前候选 | 新鲜 | 字符量代理不是精确 tokenizer token |
+| V3 | N2 | 真实 Git 基线对照：默认强制上下文代理下降 77.2% | passed | `b3d9a17` vs 当前候选 | 新鲜 | 字符量代理不是精确 tokenizer token |
 | V4 | N4 | eval self-test、真实 Git baseline/candidate、坏候选非零、报告哈希一致性 | passed | 最终 runner/rubric/cases | 新鲜 | 离线静态映射不代表模型行为 |
 | V5 | N5 | 4 个 TemporaryDirectory 真实安装集成测试；`--force`、七桥接、越界和不完整源 | passed | 最终安装器与测试 | 新鲜 | 云端 Windows/Linux CI 需推送后观察 |
 | V6 | N3,N4 | 两个独立新上下文 forward-test；持久记录校验；harness synthetic self-test | passed | 本轮临时仓库与 `forward-tests.json` | 新鲜 | 精确模型/采样配置和原始工具 trace 不可见，已披露 |
 | V7 | N2-N7 | 官方技能校验、4 项安装测试、forward self/record/NOT_RUN、eval self/candidate/known-bad、fixture RED、YAML/引用/报告一致性、diff/缓存检查 | passed | 最终候选工作树 | 新鲜 | 云端 CI 只能在推送后观察 |
 | V8 | N8 | 远程 SHA、`npx skills --list`、GitHub Actions Ubuntu/Windows | passed | 功能提交 `0cf30f2` | 新鲜 | Actions: `29529506078`，两个矩阵任务均 success |
+| V9 | N9,N10 | 三路只读完成审计、参考库 13,018 可发现技能扫描、8 项安装测试、6 项 forward 测试、eval legacy 路由 self-test | in_progress | completion-audit 工作树 | 新鲜 | 等待主线程统一运行和独立 Critic |
+
+## 目标追踪
+
+| 目标要求 | 分析证据 | 实现证据 | 验证证据 | 状态 |
+|---|---|---|---|---|
+| 主项目自动识别 | `docs/project-benchmark-analysis.md` 第 1–2 节 | 仓库结构与入口 | 文件/manifest/CI 扫描 | passed |
+| 参考项目扫描与排序 | `docs/reference-scan-report.md` | 候选到 reference/eval 的映射 | 13,018 可发现技能与指定候选深读 | passed |
+| 六层差距和迁移分类 | 项目报告第 4–5 节 | 轻量核心、八契约、eval、安装器 | baseline/candidate 与测试 | passed |
+| P0/P1/P2 路线图和全栈方案 | 项目报告第 6–7 节 | 当前批和后续 P2 | Critic 待复验 | in_progress |
+| 修改文件、兼容、验证、回滚 | 项目报告第 8 节 | 当前工作树 diff | 全套测试待统一运行 | in_progress |
+| 需要补充的信息 | 项目报告第 9 节 | README 降级方式 | 非阻塞未知项披露 | passed |
+| 独立审查和修复复验 | `reviews/final-critic.md` | Builder 修复映射 | 同一 Critic Verdict | pending |
 
 ## 审查循环
 
@@ -78,9 +98,9 @@
 
 ## 当前结论
 
-- 当前阶段：完成。
-- 已完成：轻量核心、八个模块化契约、全面中文 README、真实安装测试、真实 Git 基线 eval、两次独立新上下文 forward-test、两轮 Critic 和最终本地完成门。
-- 当前主节点：无；全部节点已通过。
-- 下一步：用户可通过仓库 URL、`npx skills` 或 Python 安装器安装使用。
-- 未验证项：无阻塞项；不同客户端是否隐式自动调用仍取决于其版本和配置，README 已提供显式调用与桥接降级。
-- 剩余边界：静态 eval 只能证明规则结构；真实 forward-test 仍受未暴露模型版本和临时 fixture 规模限制。
+- 当前阶段：completion-audit 安全加固与证据补全。
+- 已完成：既有技能交付；本轮主项目识别、参考扫描、1–9 报告和三组代码修复初稿。
+- 当前主节点：N10。
+- 下一步：统一运行全部测试、生成最终报告，启动独立 Critic 并持久化修复/复验。
+- 未验证项：本批改动的双 OS 云端 CI、远程推送和 Claude Code 真实行为仍未执行。
+- 剩余边界：格式/安装兼容不等于所有客户端行为一致；历史大提交没有逐规则消融证据，本报告已诚实披露。
