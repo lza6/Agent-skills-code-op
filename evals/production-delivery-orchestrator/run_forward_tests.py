@@ -125,7 +125,9 @@ EXPECTED_RECORDED_CASES: dict[str, dict[str, Any]] = {
     },
 }
 
-ARTIFACT_HASH_DOMAIN = b"production-delivery-orchestrator-artifact-v1\0"
+ARTIFACT_HASH_DOMAIN = b"production-delivery-orchestrator-artifact-v2\0"
+ARTIFACT_BINARY_KIND = b"B"
+ARTIFACT_UTF8_TEXT_KIND = b"T"
 ARTIFACT_IGNORED_DIRECTORIES = {"__pycache__"}
 ARTIFACT_IGNORED_FILES = {".DS_Store"}
 ARTIFACT_IGNORED_SUFFIXES = {".pyc"}
@@ -170,19 +172,53 @@ def skill_artifact_files(skill_dir: Path) -> list[Path]:
     return sorted(files, key=lambda path: path.relative_to(skill_dir).as_posix())
 
 
+def canonical_artifact_content(content: bytes) -> tuple[bytes, bytes]:
+    """Return an explicit content kind and deterministic bytes for artifact hashing.
+
+    Strict UTF-8 without NUL is text and has CRLF/CR normalized to LF. Content that
+    is not strict UTF-8, or contains NUL, is binary and remains byte-for-byte exact.
+    The kind tag is hashed too, so text and binary framing cannot collide.
+    """
+
+    if b"\0" in content:
+        return ARTIFACT_BINARY_KIND, content
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return ARTIFACT_BINARY_KIND, content
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return ARTIFACT_UTF8_TEXT_KIND, normalized.encode("utf-8")
+
+
 def skill_artifact_sha256(skill_dir: Path) -> str:
-    """Hash relative POSIX paths and bytes with length framing to avoid ambiguity."""
+    """Hash complete relative paths and canonical content with length framing."""
 
     digest = hashlib.sha256()
     digest.update(ARTIFACT_HASH_DOMAIN)
     for path in skill_artifact_files(skill_dir):
         relative_path = path.relative_to(skill_dir).as_posix().encode("utf-8")
-        content = path.read_bytes()
+        content_kind, content = canonical_artifact_content(path.read_bytes())
         digest.update(len(relative_path).to_bytes(8, byteorder="big"))
         digest.update(relative_path)
+        digest.update(content_kind)
         digest.update(len(content).to_bytes(8, byteorder="big"))
         digest.update(content)
     return digest.hexdigest()
+
+
+def configure_utf8_stdio() -> None:
+    """Make CLI output independent of the Windows console's legacy code page."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (OSError, ValueError):
+            # Some embedded or already-detached streams cannot be reconfigured.
+            # Their owner remains responsible for supplying a Unicode-capable stream.
+            continue
 
 
 def redact_text(text: str) -> str:
@@ -644,6 +680,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    configure_utf8_stdio()
     args = parse_args()
     if args.self_test:
         return self_test()

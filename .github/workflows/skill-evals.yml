@@ -9,6 +9,9 @@ permissions:
 
 jobs:
   offline-evals:
+    env:
+      PYTHONUTF8: "1"
+
     strategy:
       fail-fast: false
       matrix:

@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -35,6 +38,18 @@ class ForwardTestHarnessTest(unittest.TestCase):
         record["candidate"]["skill_sha256_at_execution"] = artifact_hash
         record["candidate"]["current_skill_sha256_when_recorded"] = artifact_hash
         return record
+
+    def legacy_raw_artifact_hash(self, skill_dir: Path) -> str:
+        digest = hashlib.sha256()
+        digest.update(b"production-delivery-orchestrator-artifact-v1\0")
+        for path in HARNESS.skill_artifact_files(skill_dir):
+            relative_path = path.relative_to(skill_dir).as_posix().encode("utf-8")
+            content = path.read_bytes()
+            digest.update(len(relative_path).to_bytes(8, byteorder="big"))
+            digest.update(relative_path)
+            digest.update(len(content).to_bytes(8, byteorder="big"))
+            digest.update(content)
+        return digest.hexdigest()
 
     def test_redacts_text_commands_and_persisted_reports(self) -> None:
         secrets = {
@@ -183,6 +198,63 @@ class ForwardTestHarnessTest(unittest.TestCase):
 
             self.assertEqual(HARNESS.skill_artifact_sha256(skill_dir), original_hash)
 
+    def test_utf8_text_eol_variants_have_the_same_artifact_hash(self) -> None:
+        hashes: list[str] = []
+        with tempfile.TemporaryDirectory(prefix="pdo-artifact-eol-") as temp:
+            root = Path(temp)
+            for index, content in enumerate(
+                (b"alpha\nbeta\n", b"alpha\r\nbeta\r\n", b"alpha\rbeta\r")
+            ):
+                skill_dir = root / f"skill-{index}"
+                skill_dir.mkdir()
+                (skill_dir / "contract.md").write_bytes(content)
+                hashes.append(HARNESS.skill_artifact_sha256(skill_dir))
+
+        self.assertEqual(len(set(hashes)), 1)
+
+    def test_real_text_content_change_changes_artifact_hash(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-artifact-text-change-") as temp:
+            skill_dir = Path(temp) / "skill"
+            skill_dir.mkdir()
+            contract = skill_dir / "contract.md"
+            contract.write_bytes(b"alpha\r\nbeta\r\n")
+            original_hash = HARNESS.skill_artifact_sha256(skill_dir)
+            contract.write_bytes(b"alpha\r\ngamma\r\n")
+
+            self.assertNotEqual(
+                HARNESS.skill_artifact_sha256(skill_dir), original_hash
+            )
+
+    def test_binary_content_is_not_eol_normalized(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-artifact-binary-") as temp:
+            skill_dir = Path(temp) / "skill"
+            skill_dir.mkdir()
+            artifact = skill_dir / "asset.bin"
+            original = b"\x89PNG\r\n\x1a\n\0binary\rpayload"
+            normalized_eol = original.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            artifact.write_bytes(original)
+            original_hash = HARNESS.skill_artifact_sha256(skill_dir)
+            artifact.write_bytes(normalized_eol)
+
+            self.assertNotEqual(
+                HARNESS.skill_artifact_sha256(skill_dir), original_hash
+            )
+
+    def test_legacy_raw_byte_hash_is_rejected_after_canonicalization(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-artifact-legacy-") as temp:
+            skill_dir = self.copy_skill_fixture(Path(temp))
+            record = self.valid_record_for(skill_dir)
+            legacy_hash = self.legacy_raw_artifact_hash(skill_dir)
+            record["candidate"]["skill_sha256_at_execution"] = legacy_hash
+            record["candidate"]["current_skill_sha256_when_recorded"] = legacy_hash
+
+            with mock.patch.object(HARNESS, "SKILL_DIR", skill_dir):
+                errors = HARNESS.validate_record(record)
+            canonical_hash = HARNESS.skill_artifact_sha256(skill_dir)
+
+        self.assertNotEqual(legacy_hash, canonical_hash)
+        self.assertTrue(any("陈旧" in error or "不匹配" in error for error in errors))
+
     def test_artifact_hash_fails_closed_for_behavioral_symlinks(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-artifact-symlink-") as temp:
             root = Path(temp)
@@ -230,12 +302,51 @@ class ForwardTestHarnessTest(unittest.TestCase):
                     any("陈旧" in error or "不匹配" in error for error in errors)
                 )
 
-    def test_current_record_passes_strict_verification(self) -> None:
+    def test_current_record_matches_strict_verification_result(self) -> None:
+        record = json.loads(RECORDED_RUN.read_text(encoding="utf-8"))
+        current_hash = HARNESS.skill_artifact_sha256(HARNESS.SKILL_DIR)
+        candidate = record.get("candidate", {})
+        hash_is_current = (
+            candidate.get("skill_sha256_at_execution") == current_hash
+            and candidate.get("current_skill_sha256_when_recorded") == current_hash
+        )
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             result = HARNESS.verify_record(RECORDED_RUN)
-        self.assertEqual(result, 0)
-        self.assertEqual(json.loads(output.getvalue())["status"], "PASS")
+        payload = json.loads(output.getvalue())
+        if hash_is_current:
+            self.assertEqual(result, 0)
+            self.assertEqual(payload["status"], "PASS")
+        else:
+            self.assertEqual(result, 1)
+            self.assertEqual(payload["status"], "FAIL")
+            self.assertTrue(
+                any("陈旧" in error or "不匹配" in error for error in payload["errors"])
+            )
+
+    def test_cli_reconfigures_cp1252_stdout_to_utf8(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-cp1252-output-") as temp:
+            invalid_record = Path(temp) / "invalid-record.json"
+            invalid_record.write_text("[]\n", encoding="utf-8")
+            environment = os.environ.copy()
+            environment["PYTHONIOENCODING"] = "cp1252:strict"
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(HARNESS_PATH),
+                    "--verify-record",
+                    str(invalid_record),
+                ],
+                check=False,
+                capture_output=True,
+                env=environment,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        payload = json.loads(result.stdout.decode("utf-8"))
+        self.assertEqual(payload["status"], "FAIL")
+        self.assertIn("根记录必须是对象", payload["errors"])
+        self.assertNotIn(b"UnicodeEncodeError", result.stderr)
 
     def test_no_agent_command_returns_not_run_exit_two(self) -> None:
         args = argparse.Namespace(self_test=False, verify_record=None, agent_command=None)
