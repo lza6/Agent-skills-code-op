@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""将技能安装到常见智能体目录，并按需生成项目指令桥接。"""
+"""将技能安装到常见智能体目录，并按需生成轻量项目规则桥接。"""
 
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import sys
 import uuid
@@ -24,13 +25,14 @@ BRIDGE_TARGETS = (
     "windsurf",
     "cline",
 )
+REFERENCE_LINK_RE = re.compile(r"`(references/[A-Za-z0-9_.\-/]+\.md)`")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "将通用技能安装到 Codex、Claude Code 和通用 Agent Skills 目录；"
-            "也可为其他编码智能体生成始终生效的项目指令桥接。"
+            "也可为其他编码智能体生成只负责能力路由的项目指令桥接。"
         )
     )
     parser.add_argument("--scope", choices=("user", "project"), default="project")
@@ -77,7 +79,11 @@ def expand(values: list[str], universe: tuple[str, ...]) -> list[str]:
 
 def source_root() -> Path:
     root = Path(__file__).resolve().parents[1]
-    required = (root / "SKILL.md", root / "references" / "system-prompt.md")
+    skill_md = root / "SKILL.md"
+    required = [skill_md, root / "agents" / "openai.yaml"]
+    if skill_md.is_file():
+        links = dict.fromkeys(REFERENCE_LINK_RE.findall(skill_md.read_text(encoding="utf-8")))
+        required.extend(root / Path(link) for link in links)
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError(f"技能源文件不完整，缺少：{', '.join(missing)}")
@@ -102,9 +108,14 @@ def target_base(scope: str, target: str, project_dir: Path) -> Path:
 
 def copy_skill(source: Path, destination: Path, force: bool, dry_run: bool) -> None:
     source = source.resolve()
-    destination = destination.resolve()
+    destination = destination.expanduser().absolute()
 
-    if source == destination:
+    if destination.is_symlink():
+        raise ValueError(f"拒绝替换符号链接目标：{destination}")
+    if destination.exists() and not destination.is_dir():
+        raise ValueError(f"安装目标存在但不是目录：{destination}")
+
+    if source == destination.resolve(strict=False):
         print(f"跳过：当前已从目标目录运行 {destination}")
         return
 
@@ -125,20 +136,31 @@ def copy_skill(source: Path, destination: Path, force: bool, dry_run: bool) -> N
         staging,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
     )
+    backup: Path | None = None
     try:
         if destination.exists():
-            shutil.rmtree(destination)
+            backup = destination.parent / f".{SKILL_NAME}.backup-{uuid.uuid4().hex}"
+            destination.rename(backup)
         staging.rename(destination)
     except Exception:
         if staging.exists():
             shutil.rmtree(staging)
+        if backup is not None and backup.exists() and not destination.exists():
+            backup.rename(destination)
         raise
+    else:
+        if backup is not None and backup.exists():
+            shutil.rmtree(backup)
 
 
 def preflight_destination(source: Path, destination: Path, force: bool) -> None:
     source = source.resolve()
-    destination = destination.resolve()
-    if source != destination and destination.exists() and not force:
+    destination = destination.expanduser().absolute()
+    if destination.is_symlink():
+        raise ValueError(f"拒绝安装到符号链接目标：{destination}")
+    if destination.exists() and not destination.is_dir():
+        raise ValueError(f"安装目标存在但不是目录：{destination}")
+    if source != destination.resolve(strict=False) and destination.exists() and not force:
         raise FileExistsError(
             f"{destination} 已存在；只有在确认要替换时才使用 --force 重新运行。"
         )
@@ -148,15 +170,22 @@ def managed_block() -> str:
     return f"""{START_MARKER}
 ## 生产级交付编排器
 
-处理任何软件或产品工程请求前，先读取并应用
-`.agents/skills/{SKILL_NAME}/SKILL.md`。遵循其强制加载顺序，
-在制定计划、修改文件或执行任务专属操作前，完整读取
-`.agents/skills/{SKILL_NAME}/references/system-prompt.md`。
+当用户明确调用 `{SKILL_NAME}`，或请求端到端的软件实现、修复、
+重构、复杂审查、生产级验证，或只描述了需要从仓库侦察的模糊故障时，
+读取并应用 `.agents/skills/{SKILL_NAME}/SKILL.md`。
+
+该技能采用渐进披露：先读取 `SKILL.md`，再只按其中的任务路由读取
+与当前请求直接相关的 reference。不要默认全文加载所有 reference，
+也不要把 `references/system-prompt.md` 作为每个软件请求的强制前置。
+纯事实问答、非软件请求和无需生产交付闭环的简单任务不必启用本技能。
 
 执行其结果门：如果用户最终可见的结果存在实质性歧义，
 提供两到三个以结果为导向的选项，并将推荐结果放在第一个。
 不要要求用户选择可以从仓库事实中推导的底层实现细节。
-这些项目指令始终低于更高优先级的平台规则和用户当前授权。
+明确要求“修复、实现或落地”时，可以完成范围内的本地修改和
+非破坏性验证；分析、审查或规划请求不得自动修改代码。生产部署、
+外部写入、真实付费调用、推送合并、破坏性操作和实质性扩展范围
+仍需明确授权。这些项目指令低于平台规则和用户当前授权。
 {END_MARKER}"""
 
 

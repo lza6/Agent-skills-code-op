@@ -1,0 +1,69 @@
+name: skill-evals
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-evals:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11"]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Validate Python syntax
+        run: >-
+          python -c "from pathlib import Path;
+          compile(Path('skills/production-delivery-orchestrator/scripts/install_skill.py').read_text(encoding='utf-8'),
+          'install_skill.py', 'exec');
+          compile(Path('evals/production-delivery-orchestrator/run_evals.py').read_text(encoding='utf-8'),
+          'run_evals.py', 'exec')"
+
+      - name: Run evaluation self-test
+        run: python evals/production-delivery-orchestrator/run_evals.py --self-test
+
+      - name: Compare published baseline with candidate
+        run: >-
+          python evals/production-delivery-orchestrator/run_evals.py
+          --output-dir .eval-reports
+          --report-prefix ci
+
+      - name: Validate forward-test harness and recorded real runs
+        run: |
+          python evals/production-delivery-orchestrator/run_forward_tests.py --self-test
+          python evals/production-delivery-orchestrator/run_forward_tests.py --verify-record evals/production-delivery-orchestrator/reports/forward-tests.json
+
+      - name: Confirm known-bad candidate is rejected
+        run: >-
+          python -c "import subprocess, sys;
+          result = subprocess.run([sys.executable,
+          'evals/production-delivery-orchestrator/run_evals.py',
+          '--candidate',
+          'evals/production-delivery-orchestrator/baselines/legacy-monolithic-proxy.md',
+          '--output-dir', '.eval-reports', '--report-prefix', 'known-bad']);
+          raise SystemExit(0 if result.returncode == 1 else 1)"
+
+      - name: Run real installer integration tests
+        run: >-
+          python -m unittest discover
+          -s skills/production-delivery-orchestrator/tests
+          -p "test_*.py"
+          -v
+
+      - name: Check whitespace errors
+        run: git diff --check

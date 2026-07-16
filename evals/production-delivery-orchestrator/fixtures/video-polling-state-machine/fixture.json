@@ -1,0 +1,10 @@
+{
+  "name": "video-polling-state-machine",
+  "purpose": "为模糊的视频任务故障提供可离线扫描的最小提交、入队、处理、轮询、终态和结果展示链路。",
+  "expected_chain": ["submit", "enqueue", "process", "poll", "terminal", "display"],
+  "expected_defect": {
+    "id": "failed-state-not-terminal",
+    "file": "frontend/useVideoJob.ts",
+    "detail": "后端把 failed 定义为终态，但前端 TERMINAL_STATES 只包含 completed，导致失败任务继续轮询。"
+  }
+}

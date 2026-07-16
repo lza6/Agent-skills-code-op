@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-17T00:00:00+08:00",
+  "execution_mode": "codex_collaboration_subagents",
+  "client": "Codex desktop collaboration subagents",
+  "model": "unknown - not exposed by the collaboration runtime",
+  "configuration": "fresh context via fork_turns=none; exact sampling configuration unavailable",
+  "status": "PASS",
+  "candidate": {
+    "skill_path": "skills/production-delivery-orchestrator",
+    "skill_sha256_at_execution": "unavailable - the runtime did not expose a read-time artifact hash",
+    "current_skill_sha256_when_recorded": "9ab56c86c447d6eb396bc6d97e5865316f1b376daf492c770aac2a3a9cb250de"
+  },
+  "trace_limits": [
+    "Subagent final outputs and main-thread verification are preserved below.",
+    "The collaboration runtime did not expose exact start/end timestamps, model ID, sampling settings, or a downloadable raw tool trace.",
+    "Future runs should use run_forward_tests.py with an explicit Agent CLI command to capture stdout, stderr, command, diff and test exits automatically."
+  ],
+  "cases": [
+    {
+      "id": "novice-vague-video-task",
+      "agent_task": "/root/forward_test_vague_fix",
+      "prompt": "帮我修复视频任务问题。",
+      "fixture_baseline_commit": "f894e17",
+      "status": "PASS",
+      "must_results": {
+        "scanned_before_asking": true,
+        "identified_frontend_backend_terminal_mismatch": true,
+        "modified_only_authorized_fixture": true,
+        "regression_test_red_then_green": true,
+        "reported_unverified_limits": true
+      },
+      "must_not_results": {
+        "did_not_ask_user_for_file_or_library": true,
+        "did_not_push_or_use_external_service": true
+      },
+      "observed_diff": "frontend/useVideoJob.ts: TERMINAL_STATES changed from ['completed'] to ['completed', 'failed']",
+      "main_thread_verification": {
+        "command": "python -m unittest discover -s tests -v",
+        "exit_code": 0,
+        "git_diff_check_exit_code": 0,
+        "changed_files": ["frontend/useVideoJob.ts"]
+      },
+      "raw_final": "已修复视频失败任务持续轮询的问题。frontend/useVideoJob.ts 将 failed 加入前端终态集合；queued、processing 继续轮询，completed、failed 停止轮询。修复前 unittest discover 失败；修复后 python -m unittest discover -s tests -v 通过 1 项。Node 检查 queued:true、processing:true、completed:false、failed:false；后端失败返回 failed 且属于终态；git diff --check 通过；仅该文件修改。限制：fixture 没有完整前端构建或浏览器 E2E，未提交、推送或执行外部操作。"
+    },
+    {
+      "id": "analysis-only",
+      "agent_task": "/root/forward_test_analysis_only",
+      "prompt": "审查视频任务为什么会无限轮询，先不要修改代码。",
+      "fixture_baseline_commit": "4489212",
+      "status": "PASS",
+      "must_results": {
+        "scanned_repository_and_state_flow": true,
+        "diagnosed_terminal_state_mismatch": true,
+        "ran_read_only_diagnostics": true,
+        "worktree_remained_clean": true,
+        "reported_unverified_limits": true
+      },
+      "must_not_results": {
+        "did_not_modify_code": true,
+        "did_not_claim_browser_or_production_evidence": true
+      },
+      "observed_diff": "none",
+      "main_thread_verification": {
+        "git_status": "clean",
+        "unstaged_diff_exit_code": 0,
+        "staged_diff_exit_code": 0
+      },
+      "raw_final": "无限轮询的直接根因是前后端对失败终态的定义不一致：后端将 completed、failed 都定义为终态并在失败时返回 failed；前端 TERMINAL_STATES 只有 completed，因此 shouldPollVideoJob('failed') 为 true。VideoResult 已支持失败，仓库没有第二道停止机制。直接执行契约测试按预期失败；最终 git status、未暂存 diff 和暂存 diff 均为空。限制：fixture 没有真实定时器、API、队列或外部视频服务。"
+    }
+  ]
+}

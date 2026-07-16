@@ -1,6 +1,6 @@
 interface:
   display_name: "全能生产交付编排器"
-  short_description: "先对齐用户最终结果，再自主完成生产级软件实现、验证、审查与交付"
+  short_description: "自动侦察模糊需求，并把复杂软件任务推进到可验证交付"
   default_prompt: "使用 $production-delivery-orchestrator 将我的软件需求推进到可验证的最终交付。"
 policy:
   allow_implicit_invocation: true
