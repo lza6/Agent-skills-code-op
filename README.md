@@ -378,7 +378,7 @@ python evals\production-delivery-orchestrator\run_forward_tests.py `
   --agent-command codex exec --full-auto --cd "{workspace}" "Use production-delivery-orchestrator at {skill_dir} to solve: {prompt}"
 ```
 
-没有 `--agent-command` 时脚本退出 `2` 并标记 `NOT_RUN`，不会伪造 PASS。当前两次 Codex 新上下文真实测试的输入、完整技能 artifact hash、最终输出摘要、fixture commit、diff、测试结果和限制保存在 `reports/forward-tests.json` 与 `reports/forward-tests.md`；任一技能文件内容或路径变化都会使旧记录失效。
+没有 `--agent-command` 时脚本退出 `2` 并标记 `NOT_RUN`，不会伪造 PASS。当前两次 Codex 新上下文真实测试的输入、完整技能 artifact hash、最终输出摘要、fixture commit、diff、测试结果和限制保存在 `reports/forward-tests.json` 与 `reports/forward-tests.md`；任一技能文件内容或路径变化都会使旧记录失效。哈希会把 UTF-8 文本的 CRLF/CR 统一为 LF，但保持二进制原始字节，因此 Windows/Linux checkout 可比较且不会掩盖真实内容变化。
 
 仓库的 GitHub Actions 会在 Windows 和 Linux 上运行同一组自测、真实 Git 基线对照、已知坏候选阻断、forward-test harness/记录与脱敏安全测试、真实临时安装集成测试和空白错误检查。
 

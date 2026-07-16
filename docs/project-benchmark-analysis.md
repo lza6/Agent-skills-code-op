@@ -151,7 +151,7 @@
 |---|---|---|---|
 | 功能层 | 模糊请求可能先问用户；测试失败易交回用户 | 自动侦察、失败续修、异步任务专项、结果选项 | 真实 Claude/其他 CLI 行为样本不足 |
 | 架构层 | 每次强制加载长协议；description 承载工作流 | 轻量状态机和八个按需契约 | 长协议与模块契约仍重复；eval 单文件偏大 |
-| 工程层 | 无可执行 eval、无真实安装测试、无 CI | baseline、known-bad、forward harness、11 项安装测试、10 项 forward 安全/证据测试、双 OS CI | 缺正式版本元数据、覆盖率和更多真实 Agent 场景 |
+| 工程层 | 无可执行 eval、无真实安装测试、无 CI | baseline、known-bad、forward harness、11 项安装测试、15 项 forward 安全/证据测试、双 OS CI | 缺正式版本元数据、覆盖率和更多真实 Agent 场景 |
 | 性能层 | 默认加载约 20K 字符长协议 | 当前默认上下文代理下降 77.2% | Deep 多 reference 累积成本仍需真实 token/延迟采样 |
 | 安全层 | 桥接过度触发；路径/输出边界未系统测试 | 权限分层、custom path 防逃逸、force 保护 | 标准桥接 symlink、forward 脱敏和记录可信度需本批修复 |
 | 运维层 | 安装说明和远程验证不足 | README、npx、Python 安装器、Actions | 多目标事务、版本发布和制品校验仍是 P2 |
