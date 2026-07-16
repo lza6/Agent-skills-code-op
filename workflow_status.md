@@ -24,7 +24,7 @@
 
 - 技术与入口：单技能 Agent Skills 仓库；入口为 `skills/production-delivery-orchestrator/SKILL.md`，附 Python 安装器和 GitHub/npx 安装说明。
 - 相关模块：`SKILL.md`、`references/`、`agents/openai.yaml`、`scripts/install_skill.py`、`evals/production-delivery-orchestrator/`、`README.md`。
-- 工作区状态：已发布版本为 `abb0e0d`；当前 completion-audit 批次包含未提交的分析文档、安全加固、测试和报告更新。
+- 工作区状态：远程已发布版本为 `abb0e0d`；本地已完成分析 `2fdb3a2`、安全加固 `000ff40` 和 Critic 修复 `bef6b20`，最终文档状态待提交推送。
 - 关键约束：核心渐进披露；同批 baseline/candidate 评测；只读 Critic；不把未执行检查写成通过。
 - 重大假设及反转条件：当前仓库只发布一个技能；若安装器或 `npx skills` 真实行为与 README 不符，必须以运行结果修正文档。
 
@@ -41,8 +41,8 @@
 | N7 | 独立 Critic 审查、主线程修复、原 Critic 复验 | passed | N6 | 当前 diff 与验证证据 | 六维审查通过，P0/P1 为零 | 独立只读 Agent | 原 Critic 复验 F1-F5 全部 Closed，Verdict Approve | 仅修复已确认问题 |
 | N8 | 提交并推送 GitHub | passed | N7 | Git 历史与远程 | 提交成功、远程 main 可见 | git status/log/remote、远程发现、云端 CI | 功能提交 `0cf30f2` 已推送；Ubuntu/Windows CI 成功；npx 发现新 description | 不改写历史 |
 | N9 | 严格 1–9 项目识别与参考对标报告 | passed | N8 | `docs/` | 主项目、参考筛选、差距、迁移、路线图、实施和未知项均有证据 | 文档结构、路径和需求矩阵检查 | `docs/project-benchmark-analysis.md`、`docs/reference-scan-report.md` | 删除本批文档 |
-| N10 | 安装器与 forward/eval 证据安全加固 | in_progress | N9 | installer、forward、eval、tests、CI | symlink 不越界、报告脱敏、记录强校验、legacy 不代打 | 8 项安装测试、6 项 forward 测试、eval 三类 self-test | 子 Agent 已初验，等待主线程全套复验 | 回退本批脚本和测试 |
-| N11 | 持久化独立 Critic、修复复验和再次发布 | pending | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | 待执行 | 不改写历史 |
+| N10 | 安装器与 forward/eval 证据安全加固 | passed | N9 | installer、forward、eval、tests、CI | symlink 不越界、报告脱敏、记录强校验、legacy 不代打 | 8 项安装测试、6 项 forward 测试、eval 三类 self-test | 主线程统一验证通过；提交 `000ff40` | 回退提交 `000ff40` |
+| N11 | 持久化独立 Critic、修复复验和再次发布 | in_progress | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | F1/F2 已由原 Critic 复验 Closed；等待最终推送和双 OS CI | 不改写历史 |
 
 ## 风险与决策
 
@@ -54,9 +54,11 @@
 | R4 | 桥接要求所有软件请求全文加载 | P0 | 污染项目上下文并冲突其他规则 | 改成轻量路由和按需加载 | 已解决 |
 | R5 | 静态评测不能证明真实模型行为 | P1 | 结构合规不等于执行有效 | 静态映射改为 COVERED/UNCOVERED；增加真实记录和可配置 forward harness | 已解决，保留模型版本未知限制 |
 | R6 | 目标要求的 1–9 分析未持久化 | P0 | 既有 README/workflow 不能替代完整对标输出 | 新增项目分析和参考扫描报告 | 已解决，待 Critic |
-| R7 | 标准桥接可经 symlink 写出项目边界 | P1 | 标准路径未统一安全解析 | 标准/custom bridge 统一 resolve + 回归测试 | 已实施，待全套复验 |
-| R8 | Forward 报告可能泄露 Secret，记录校验过弱 | P1 | command/stdout/stderr 原样持久化 | 递归脱敏、固定 case Schema、timeout 结构化 | 已实施，待全套复验 |
-| R9 | 静态 capability 可能由默认不可达 legacy 代打 | P2 | capability 曾扫描全部 references | 使用 routed capability text；baseline 强制 legacy 例外 | 已实施，待全套复验 |
+| R7 | 标准桥接可经 symlink 写出项目边界 | P1 | 标准路径未统一安全解析 | 标准/custom bridge 统一 resolve + 回归测试 | 已解决；最终套件通过 |
+| R8 | Forward 报告可能泄露 Secret，记录校验过弱 | P1 | command/stdout/stderr 原样持久化 | 递归脱敏、固定 case Schema、timeout 结构化 | 已解决；10 项测试通过 |
+| R9 | 静态 capability 可能由默认不可达 legacy 代打 | P2 | capability 曾扫描全部 references | 使用 routed capability text；baseline 强制 legacy 例外 | 已解决；candidate 强制 legacy 为 0 |
+| R10 | 项目级 native 技能安装可经父目录 symlink/junction 越界 | P1 | Critic 临时目录复现：exit 0，项目外创建技能 | 解析后边界校验；normal/force/dry-run/all/user 回归 | 已解决；原攻击重放 exit 1 |
+| R11 | Forward 记录只绑定 `SKILL.md`，routed reference 变化后仍 PASS | P1 | Critic 修改 `discovery-contract.md` 后 verify-record exit 0 | 完整 artifact hash；reference 变更和 unavailable 必须失败 | 已解决；原 Critic 复验 Closed |
 
 ## 验证台账
 
@@ -70,7 +72,10 @@
 | V6 | N3,N4 | 两个独立新上下文 forward-test；持久记录校验；harness synthetic self-test | passed | 本轮临时仓库与 `forward-tests.json` | 新鲜 | 精确模型/采样配置和原始工具 trace 不可见，已披露 |
 | V7 | N2-N7 | 官方技能校验、4 项安装测试、forward self/record/NOT_RUN、eval self/candidate/known-bad、fixture RED、YAML/引用/报告一致性、diff/缓存检查 | passed | 最终候选工作树 | 新鲜 | 云端 CI 只能在推送后观察 |
 | V8 | N8 | 远程 SHA、`npx skills --list`、GitHub Actions Ubuntu/Windows | passed | 功能提交 `0cf30f2` | 新鲜 | Actions: `29529506078`，两个矩阵任务均 success |
-| V9 | N9,N10 | 三路只读完成审计、参考库 13,018 可发现技能扫描、8 项安装测试、6 项 forward 测试、eval legacy 路由 self-test | in_progress | completion-audit 工作树 | 新鲜 | 等待主线程统一运行和独立 Critic |
+| V9 | N9,N10 | 三路只读完成审计、参考库 13,018 可发现技能扫描、8 项安装测试、6 项 forward 测试、eval legacy 路由 self-test | passed | 提交 `000ff40` 前后统一复验 | 新鲜 | 等待独立 Critic |
+| V10 | N10 | `PYTHONUTF8=1` 官方技能校验、Python 语法、8+6 单测、forward self/record/NOT_RUN、eval self/candidate/known-bad、报告指纹、diff/cache | partially invalidated | 本地提交 `000ff40`，2026-07-17 | Forward record 新鲜度被 F2 推翻；其余证据仍新鲜 | F1/F2 修复后统一重跑 |
+| V11 | N11 | F1/F2 Builder 回归、两个 fresh-context Agent、完整 artifact hash、11 项安装测试、10 项 forward 测试、原 Critic 攻击重放 | passed | 修复提交 `bef6b20`，artifact `2213242c…a6e7` | 新鲜 | 远程双 OS CI 待推送 |
+| V12 | N11 | 最终本地套件：官方校验、语法、11+10 单测、forward self/record/NOT_RUN、eval self/candidate/known-bad、报告/链接/hash、fixture RED、diff/cache | passed | 最终文档工作树，2026-07-17 | 新鲜 | PowerShell `Out-File` 模块损坏导致一次重定向中断；剩余检查用 Python 子进程复跑通过 |
 
 ## 目标追踪
 
@@ -79,10 +84,10 @@
 | 主项目自动识别 | `docs/project-benchmark-analysis.md` 第 1–2 节 | 仓库结构与入口 | 文件/manifest/CI 扫描 | passed |
 | 参考项目扫描与排序 | `docs/reference-scan-report.md` | 候选到 reference/eval 的映射 | 13,018 可发现技能与指定候选深读 | passed |
 | 六层差距和迁移分类 | 项目报告第 4–5 节 | 轻量核心、八契约、eval、安装器 | baseline/candidate 与测试 | passed |
-| P0/P1/P2 路线图和全栈方案 | 项目报告第 6–7 节 | 当前批和后续 P2 | Critic 待复验 | in_progress |
-| 修改文件、兼容、验证、回滚 | 项目报告第 8 节 | 当前工作树 diff | 全套测试待统一运行 | in_progress |
+| P0/P1/P2 路线图和全栈方案 | 项目报告第 6–7 节 | 当前批和后续 P2 | 原 Critic `Approve` | passed |
+| 修改文件、兼容、验证、回滚 | 项目报告第 8 节 | 当前工作树 diff | V12 最终套件 | passed |
 | 需要补充的信息 | 项目报告第 9 节 | README 降级方式 | 非阻塞未知项披露 | passed |
-| 独立审查和修复复验 | `reviews/final-critic.md` | Builder 修复映射 | 同一 Critic Verdict | pending |
+| 独立审查和修复复验 | `reviews/final-critic.md` | Builder 修复映射 | 同一 Critic `Approve` | passed |
 
 ## 审查循环
 
@@ -91,6 +96,8 @@
 | 预审 | 三个独立只读 Agent | Request Changes | P0: 默认长协议、不可执行 eval、过度桥接；P1: description、固定流程 | 已完成核心整改 | 进入正式 Critic |
 | 1 | `/root/final_critic_2` | Request Changes | P0: 0；P1: F1 静态映射冒充场景、F2 CI 仅 dry-run、F3 状态滞后 | F1-F5 均已修复并取得新鲜证据 | 待原 Critic 复验 |
 | 2 | `/root/final_critic_2` | Approve | P0: 0；P1: 0 | F1-F5 全部 Closed | 通过 |
+| 3 | `/root/final_critic_completion_audit` | Request Changes | P0: 0；P1: F1 native 安装越界、F2 forward artifact 陈旧 | Builder 修复中 | 待原 Critic 复验 |
+| 4 | `/root/final_critic_completion_audit` | Approve | P0: 0；P1: 0 | `bef6b20` 关闭 F1/F2 | 原攻击路径与相邻回归均通过 |
 
 ## 外部等待项
 
@@ -98,9 +105,9 @@
 
 ## 当前结论
 
-- 当前阶段：completion-audit 安全加固与证据补全。
-- 已完成：既有技能交付；本轮主项目识别、参考扫描、1–9 报告和三组代码修复初稿。
-- 当前主节点：N10。
-- 下一步：统一运行全部测试、生成最终报告，启动独立 Critic 并持久化修复/复验。
+- 当前阶段：最终文档、提交、推送和双 OS CI。
+- 已完成：项目识别与参考扫描、1–9 报告、安全加固、两个 Critic P1 修复、真实 forward-test、原 Critic `Approve` 和最终本地验证。
+- 当前主节点：N11。
+- 下一步：提交文档状态，推送并观察双 OS CI；核对远程 SHA、npx 发现和干净工作树。
 - 未验证项：本批改动的双 OS 云端 CI、远程推送和 Claude Code 真实行为仍未执行。
 - 剩余边界：格式/安装兼容不等于所有客户端行为一致；历史大提交没有逐规则消融证据，本报告已诚实披露。

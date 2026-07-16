@@ -6,6 +6,15 @@
 
 > 用户决定最后要看到什么结果；智能体根据真实仓库完成技术侦察、实现、测试和验收，同时在生产、外部写入、付费和破坏性操作前停下来确认。
 
+## 项目分析与审计证据
+
+- [项目识别、差距、迁移与 1–9 实施报告](docs/project-benchmark-analysis.md)
+- [参考技能库扫描、去重与候选评分](docs/reference-scan-report.md)
+- [独立 Critic 六维审查与复验](reviews/final-critic.md)
+- [持久工作流状态](workflow_status.md)
+
+参考根目录规模很大：日常 `rg` 可发现口径为 13,018 个 `SKILL.md`，结构扫描还包含隐藏、符号链接和聚合目录。仓库没有平均拼接全部规则，而是按业务相似度、架构价值、工程成熟度和可迁移性筛选高价值候选。
+
 ## 适合什么任务
 
 - “帮我修复视频任务问题”一类只有现象、没有文件位置的模糊请求；
@@ -328,6 +337,8 @@ production-delivery-orchestrator/
 
 这些动作仍需明确授权。安全的本地读取、范围内修改、测试、类型检查、Lint、构建和 Mock 验证可根据用户的修复或实现请求直接进行。
 
+安装器会拒绝越出项目目录的项目级原生安装目标、标准桥接和自定义桥接，包括经文件或父目录符号链接解析到项目外的路径。Forward-test 报告会在落盘前脱敏 Authorization、Bearer、常见 API Key/Token 和 secret 参数；不要把真实凭证直接写进命令模板。
+
 ## 技能自身验证
 
 仓库包含不调用付费 API 的离线评测：
@@ -337,7 +348,7 @@ python evals\production-delivery-orchestrator\run_evals.py --self-test
 python evals\production-delivery-orchestrator\run_evals.py --report-prefix latest
 ```
 
-默认基线直接读取 Git 提交 `b3d9a17` 中已发布的技能，不需要检出旧版本。评测会检查 frontmatter、触发边界、渐进披露、模糊请求侦察、权限、验证诚实性、独立审查、工作区保护和默认上下文代理，并生成 JSON 与 Markdown 报告。场景表只标记 `COVERED/UNCOVERED` 的静态规则映射，不会把未执行的 prompt 写成 PASS。
+默认基线直接读取 Git 提交 `b3d9a17` 中已发布的技能，不需要检出旧版本。评测会检查 frontmatter、触发边界、渐进披露、模糊请求侦察、权限、验证诚实性、独立审查、工作区保护和默认上下文代理，并生成 JSON 与 Markdown 报告。场景表只标记 `COVERED/UNCOVERED` 的静态规则映射，不会把未执行的 prompt 写成 PASS；`cases.yaml` 的 `must/must_not` 目前是设计规格，不代表 19 个场景都已由真实 Agent 逐项执行。
 
 故意使用已知坏候选时，runner 应返回非零退出：
 
@@ -367,9 +378,9 @@ python evals\production-delivery-orchestrator\run_forward_tests.py `
   --agent-command codex exec --full-auto --cd "{workspace}" "Use production-delivery-orchestrator at {skill_dir} to solve: {prompt}"
 ```
 
-没有 `--agent-command` 时脚本退出 `2` 并标记 `NOT_RUN`，不会伪造 PASS。当前两次 Codex 新上下文真实测试的输入、最终输出摘要、fixture commit、diff、测试结果和限制保存在 `reports/forward-tests.json` 与 `reports/forward-tests.md`。
+没有 `--agent-command` 时脚本退出 `2` 并标记 `NOT_RUN`，不会伪造 PASS。当前两次 Codex 新上下文真实测试的输入、完整技能 artifact hash、最终输出摘要、fixture commit、diff、测试结果和限制保存在 `reports/forward-tests.json` 与 `reports/forward-tests.md`；任一技能文件内容或路径变化都会使旧记录失效。
 
-仓库的 GitHub Actions 会在 Windows 和 Linux 上运行同一组自测、真实 Git 基线对照、已知坏候选阻断、forward-test harness/记录校验、真实临时安装集成测试和空白错误检查。
+仓库的 GitHub Actions 会在 Windows 和 Linux 上运行同一组自测、真实 Git 基线对照、已知坏候选阻断、forward-test harness/记录与脱敏安全测试、真实临时安装集成测试和空白错误检查。
 
 ## 常见问题
 
@@ -399,7 +410,17 @@ python evals\production-delivery-orchestrator\run_forward_tests.py `
 Agent-skills-code-op/
 ├── README.md
 ├── LICENSE
+├── docs/
+│   ├── project-benchmark-analysis.md
+│   └── reference-scan-report.md
+├── reviews/
+│   └── final-critic.md
+├── workflow_status.md
 ├── evals/
+│   └── production-delivery-orchestrator/
+│       ├── tests/
+│       ├── fixtures/
+│       └── reports/
 └── skills/
     └── production-delivery-orchestrator/
         ├── SKILL.md

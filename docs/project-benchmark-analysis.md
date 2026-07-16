@@ -36,7 +36,7 @@
 | 前后端边界 | 真实产品无前后端；`agents/openai.yaml` 是客户端界面元数据，Python 是工具层 | 目录职责 | 高 0.99 |
 | 基础设施边界 | GitHub Actions 是唯一 CI 基础设施；无容器、K8s、Terraform | `.github/workflows` 与配置搜索 | 高 0.99 |
 
-当前仓库跟踪 34 个文件。`SKILL.md` 约 142 行、4,471 字符；兼容长协议约 1,561 行、19,879 字符。远程 `main` 在本报告开始时为 `abb0e0d`，工作树干净。
+本轮最终交付结构包含 38 个跟踪文件。`SKILL.md` 约 141 行、4,471 字符；兼容长协议约 1,560 行、19,879 字符。远程 `main` 在本报告开始时为 `abb0e0d`，工作树干净。
 
 ### 1.2 参考项目扫描结果
 
@@ -101,7 +101,7 @@
 3. Forward 报告可能原样保存命令、stdout/stderr 中的凭证或敏感数据。
 4. `verify_record()` 只能证明字段存在，不能充分验证固定场景和证据完整性。
 5. 静态 capability 评分扫描全部 references，可能由默认不加载的长协议提供关键词。
-6. `run_evals.py` 约 703 行，多职责；长协议与模块化契约仍有重复维护面。
+6. `run_evals.py` 约 950 行，多职责；长协议与模块化契约仍有重复维护面。
 
 ### 2.4 风险点
 
@@ -151,7 +151,7 @@
 |---|---|---|---|
 | 功能层 | 模糊请求可能先问用户；测试失败易交回用户 | 自动侦察、失败续修、异步任务专项、结果选项 | 真实 Claude/其他 CLI 行为样本不足 |
 | 架构层 | 每次强制加载长协议；description 承载工作流 | 轻量状态机和八个按需契约 | 长协议与模块契约仍重复；eval 单文件偏大 |
-| 工程层 | 无可执行 eval、无真实安装测试、无 CI | baseline、known-bad、forward harness、4 项安装测试、双 OS CI | 缺正式版本元数据、覆盖率和更多单元测试 |
+| 工程层 | 无可执行 eval、无真实安装测试、无 CI | baseline、known-bad、forward harness、11 项安装测试、10 项 forward 安全/证据测试、双 OS CI | 缺正式版本元数据、覆盖率和更多真实 Agent 场景 |
 | 性能层 | 默认加载约 20K 字符长协议 | 当前默认上下文代理下降 77.2% | Deep 多 reference 累积成本仍需真实 token/延迟采样 |
 | 安全层 | 桥接过度触发；路径/输出边界未系统测试 | 权限分层、custom path 防逃逸、force 保护 | 标准桥接 symlink、forward 脱敏和记录可信度需本批修复 |
 | 运维层 | 安装说明和远程验证不足 | README、npx、Python 安装器、Actions | 多目标事务、版本发布和制品校验仍是 P2 |
@@ -184,7 +184,7 @@
 | P1 本批 | Forward 报告脱敏和强校验 | 防 Secret 入库和伪记录 | forward runner/tests | 提升审计可信度 | 过度脱敏影响调试 | N/A | CLI 参数不变 |
 | P1 本批 | Eval 使用运行时可达 references | 防长协议关键词代打 | eval runner/reports | 100 分更接近真实路由 | 评分可能下降 | N/A | 报告 Schema 扩展 |
 | P1 本批 | 持久化 1–9 分析与 Critic | 满足目标输出和恢复 | docs/reviews/workflow | 证据可追溯 | 文档维护成本 | N/A | 无行为变化 |
-| P2 | 拆分 703 行 eval runner | 降低多职责维护风险 | evals | 更易单测 | 重构回归 | N/A | 保持 CLI |
+| P2 | 拆分约 950 行 eval runner | 降低多职责维护风险 | evals | 更易单测 | 重构回归 | N/A | 保持 CLI |
 | P2 | 多目标安装事务 | 防中途失败残留 | installer | 更强原子性 | 实现复杂 | N/A | 需保持 force 行为 |
 | P2 | Claude/更多 CLI 真实矩阵 | 区分格式兼容和行为兼容 | forward reports | 更强泛化证据 | 需要环境和凭证 | N/A | 不改变技能接口 |
 | P2 | 版本和发布元数据 | 长期维护 | 根目录、release | 可重复发布 | 流程成本 | N/A | 新增不破坏 |
