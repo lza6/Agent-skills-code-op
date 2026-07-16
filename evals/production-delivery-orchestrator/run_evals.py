@@ -28,6 +28,8 @@ DEFAULT_CANDIDATE = REPO_ROOT / "skills" / "production-delivery-orchestrator"
 DEFAULT_FIXTURE = EVAL_DIR / "fixtures" / "video-polling-state-machine"
 DEFAULT_BASELINE_GIT_REF = "b3d9a17"
 DEFAULT_SKILL_RELATIVE_PATH = "skills/production-delivery-orchestrator"
+LEGACY_SYSTEM_PROMPT = "references/system-prompt.md"
+REFERENCE_LINK_PATTERN = r"references/[A-Za-z0-9_.\-/]+\.md"
 
 
 @dataclass
@@ -37,8 +39,12 @@ class Artifact:
     core_path: str
     core_text: str
     all_text: str
+    capability_text: str
     frontmatter: dict[str, str]
     reference_paths: list[str]
+    routed_reference_paths: list[str]
+    forced_legacy_reference_paths: list[str]
+    legacy_excluded_reference_paths: list[str]
     default_context_chars: int
 
 
@@ -134,19 +140,77 @@ def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return metadata, parts[2]
 
 
-def calculate_default_context_chars(core_text: str, reference_texts: list[str]) -> int:
-    """Estimate the initial forced prompt surface, not eventual on-demand reads."""
-
+def forces_legacy_system_prompt(core_text: str) -> bool:
     unconditional_patterns = (
         r"必须完整读取\s*`?references/system-prompt\.md`?",
-        r"始终完整读取",
-        r"不得用摘要替代",
+        r"始终完整读取[^\n]{0,120}references/system-prompt\.md",
+        r"references/system-prompt\.md[^\n]{0,120}不得用摘要替代",
     )
-    forces_all = any(regex_found(core_text, pattern) for pattern in unconditional_patterns)
-    return len(core_text) + (sum(map(len, reference_texts)) if forces_all else 0)
+    return any(regex_found(core_text, pattern) for pattern in unconditional_patterns)
 
 
-def load_artifact(path: Path, label: str) -> Artifact:
+def reference_route_key(path: str) -> str:
+    normalized = path.replace("\\", "/")
+    marker = "references/"
+    index = normalized.lower().rfind(marker)
+    return normalized[index:].lower() if index >= 0 else normalized.lower()
+
+
+def select_capability_references(
+    core_text: str,
+    reference_paths: list[str],
+    reference_texts: list[str],
+    *,
+    allow_forced_legacy_protocol: bool,
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Return routed modular refs, forced legacy refs, excluded legacy refs, texts.
+
+    Capability reachability follows references explicitly linked from SKILL.md. The
+    compatibility system-prompt is never treated as a modular route. It is included
+    only for a baseline whose core unconditionally forces that long protocol.
+    """
+
+    linked_routes = {
+        match.lower() for match in re.findall(REFERENCE_LINK_PATTERN, core_text, re.IGNORECASE)
+    }
+    routed_paths: list[str] = []
+    forced_legacy_paths: list[str] = []
+    legacy_excluded_paths: list[str] = []
+    capability_reference_texts: list[str] = []
+    include_legacy = allow_forced_legacy_protocol and forces_legacy_system_prompt(core_text)
+
+    for path, text in zip(reference_paths, reference_texts):
+        route_key = reference_route_key(path)
+        if route_key == LEGACY_SYSTEM_PROMPT:
+            if include_legacy:
+                forced_legacy_paths.append(path)
+                capability_reference_texts.append(text)
+            else:
+                legacy_excluded_paths.append(path)
+            continue
+        if route_key in linked_routes:
+            routed_paths.append(path)
+            capability_reference_texts.append(text)
+
+    return (
+        routed_paths,
+        forced_legacy_paths,
+        legacy_excluded_paths,
+        capability_reference_texts,
+    )
+
+
+def calculate_default_context_chars(
+    core_text: str, forced_legacy_reference_texts: list[str]
+) -> int:
+    """Estimate the initial forced prompt surface, not eventual on-demand reads."""
+
+    return len(core_text) + sum(map(len, forced_legacy_reference_texts))
+
+
+def load_artifact(
+    path: Path, label: str, *, allow_forced_legacy_protocol: bool = False
+) -> Artifact:
     path = path.resolve()
     if path.is_dir():
         core_path = path / "SKILL.md"
@@ -168,15 +232,36 @@ def load_artifact(path: Path, label: str) -> Artifact:
             reference_paths.append(str(reference))
             reference_texts.append(reference.read_text(encoding="utf-8"))
 
+    (
+        routed_reference_paths,
+        forced_legacy_reference_paths,
+        legacy_excluded_reference_paths,
+        capability_reference_texts,
+    ) = select_capability_references(
+        core_text,
+        reference_paths,
+        reference_texts,
+        allow_forced_legacy_protocol=allow_forced_legacy_protocol,
+    )
+    forced_legacy_texts = [
+        text
+        for path, text in zip(reference_paths, reference_texts)
+        if path in forced_legacy_reference_paths
+    ]
+
     return Artifact(
         label=label,
         source=str(path),
         core_path=str(core_path),
         core_text=core_text,
         all_text="\n".join([core_text, *reference_texts]),
+        capability_text="\n".join([core_text, *capability_reference_texts]),
         frontmatter=frontmatter,
         reference_paths=reference_paths,
-        default_context_chars=calculate_default_context_chars(core_text, reference_texts),
+        routed_reference_paths=routed_reference_paths,
+        forced_legacy_reference_paths=forced_legacy_reference_paths,
+        legacy_excluded_reference_paths=legacy_excluded_reference_paths,
+        default_context_chars=calculate_default_context_chars(core_text, forced_legacy_texts),
     )
 
 
@@ -194,7 +279,13 @@ def run_git(*args: str) -> str:
     return result.stdout
 
 
-def load_git_artifact(ref: str, skill_relative_path: str, label: str) -> Artifact:
+def load_git_artifact(
+    ref: str,
+    skill_relative_path: str,
+    label: str,
+    *,
+    allow_forced_legacy_protocol: bool = False,
+) -> Artifact:
     """Load the actual published baseline from Git without creating a checkout."""
 
     core_path = f"{skill_relative_path}/SKILL.md"
@@ -206,15 +297,35 @@ def load_git_artifact(ref: str, skill_relative_path: str, label: str) -> Artifac
         name for name in names.splitlines() if name.endswith(".md")
     ]
     reference_texts = [run_git("show", f"{ref}:{name}") for name in reference_paths]
+    (
+        routed_reference_paths,
+        forced_legacy_reference_paths,
+        legacy_excluded_reference_paths,
+        capability_reference_texts,
+    ) = select_capability_references(
+        core_text,
+        reference_paths,
+        reference_texts,
+        allow_forced_legacy_protocol=allow_forced_legacy_protocol,
+    )
+    forced_legacy_texts = [
+        text
+        for path, text in zip(reference_paths, reference_texts)
+        if path in forced_legacy_reference_paths
+    ]
     return Artifact(
         label=label,
         source=f"git:{ref}:{skill_relative_path}",
         core_path=f"git:{ref}:{core_path}",
         core_text=core_text,
         all_text="\n".join([core_text, *reference_texts]),
+        capability_text="\n".join([core_text, *capability_reference_texts]),
         frontmatter=frontmatter,
         reference_paths=reference_paths,
-        default_context_chars=calculate_default_context_chars(core_text, reference_texts),
+        routed_reference_paths=routed_reference_paths,
+        forced_legacy_reference_paths=forced_legacy_reference_paths,
+        legacy_excluded_reference_paths=legacy_excluded_reference_paths,
+        default_context_chars=calculate_default_context_chars(core_text, forced_legacy_texts),
     )
 
 
@@ -381,9 +492,19 @@ def evaluate_check(
             f"后置概念：{then_pattern or '未找到'}@{then_index}",
         ]
     elif kind == "capability":
-        hits = {pattern: regex_found(artifact.all_text, pattern) for pattern in check["patterns"]}
+        hits = {
+            pattern: regex_found(artifact.capability_text, pattern)
+            for pattern in check["patterns"]
+        }
         passed = all(hits.values())
-        evidence = [f"{pattern}：{'命中' if hit else '缺失'}" for pattern, hit in hits.items()]
+        evidence = [
+            "能力可达文本：SKILL.md + "
+            f"{len(artifact.routed_reference_paths)} 个模块化 routed references + "
+            f"{len(artifact.forced_legacy_reference_paths)} 个 baseline 强制 legacy references",
+            "Legacy exclusion："
+            f"{artifact.legacy_excluded_reference_paths or '无'}",
+            *[f"{pattern}：{'命中' if hit else '缺失'}" for pattern, hit in hits.items()],
+        ]
     elif kind == "fixture":
         passed = fixture["chain_complete"] and fixture["defect_detected"]
         evidence = [
@@ -425,8 +546,17 @@ def evaluate_artifact(
             "source": artifact.source,
             "core_path": artifact.core_path,
             "reference_count": len(artifact.reference_paths),
+            "routed_reference_count": len(artifact.routed_reference_paths),
+            "routed_reference_paths": artifact.routed_reference_paths,
+            "forced_legacy_reference_count": len(artifact.forced_legacy_reference_paths),
+            "forced_legacy_reference_paths": artifact.forced_legacy_reference_paths,
+            "legacy_excluded_reference_count": len(
+                artifact.legacy_excluded_reference_paths
+            ),
+            "legacy_excluded_reference_paths": artifact.legacy_excluded_reference_paths,
             "default_context_chars": artifact.default_context_chars,
             "content_sha256": sha256_text(artifact.all_text),
+            "capability_text_sha256": sha256_text(artifact.capability_text),
         },
         "score": score,
         "checks": [asdict(result) for result in results],
@@ -487,6 +617,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- 降幅：`{report['comparison']['context_reduction_percent']:.1f}%`（最低要求 `{report['comparison']['required_context_reduction_percent']:.1f}%`）",
         "- 这是强制初始加载字符量代理，不是 tokenizer 的精确 token 计数。",
         "",
+        "## Capability 路由可达性",
+        "",
+        f"- Baseline 模块化 routed references：`{baseline['artifact']['routed_reference_count']}`",
+        f"- Baseline 强制 legacy references：`{baseline['artifact']['forced_legacy_reference_count']}`；排除：`{baseline['artifact']['legacy_excluded_reference_paths'] or '无'}`",
+        f"- Candidate 模块化 routed references：`{candidate['artifact']['routed_reference_count']}`",
+        f"- Candidate 强制 legacy references：`{candidate['artifact']['forced_legacy_reference_count']}`；排除：`{candidate['artifact']['legacy_excluded_reference_paths'] or '无'}`",
+        "- Capability 检查只搜索核心入口、入口路由到的模块化 references，以及 baseline 核心无条件强制加载的 legacy 长协议。完整内容哈希仍覆盖全部 references。",
+        "",
         "## Candidate 检查",
         "",
     ]
@@ -538,10 +676,15 @@ def run_evaluation(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     cases = parse_cases(args.cases)
     fixture = analyze_fixture(args.fixture)
     baseline_artifact = (
-        load_artifact(args.baseline, "baseline")
+        load_artifact(
+            args.baseline, "baseline", allow_forced_legacy_protocol=True
+        )
         if args.baseline
         else load_git_artifact(
-            args.baseline_git_ref, args.skill_relative_path, "baseline"
+            args.baseline_git_ref,
+            args.skill_relative_path,
+            "baseline",
+            allow_forced_legacy_protocol=True,
         )
     )
     candidate_artifact = load_artifact(args.candidate, "candidate")
@@ -570,6 +713,12 @@ def run_evaluation(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         "cases_sha256": sha256_file(args.cases),
         "candidate_content_sha256": candidate["artifact"]["content_sha256"],
         "baseline_content_sha256": baseline["artifact"]["content_sha256"],
+        "candidate_capability_text_sha256": candidate["artifact"][
+            "capability_text_sha256"
+        ],
+        "baseline_capability_text_sha256": baseline["artifact"][
+            "capability_text_sha256"
+        ],
     }
     evaluation_fingerprint = sha256_text(
         json.dumps(input_hashes, sort_keys=True, ensure_ascii=False)
@@ -585,6 +734,30 @@ def run_evaluation(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             "baseline_git_ref": baseline_ref,
             "input_hashes": input_hashes,
             "evaluation_fingerprint": evaluation_fingerprint,
+            "capability_routing": {
+                "baseline": {
+                    "routed_reference_count": baseline["artifact"][
+                        "routed_reference_count"
+                    ],
+                    "forced_legacy_reference_count": baseline["artifact"][
+                        "forced_legacy_reference_count"
+                    ],
+                    "legacy_excluded_reference_count": baseline["artifact"][
+                        "legacy_excluded_reference_count"
+                    ],
+                },
+                "candidate": {
+                    "routed_reference_count": candidate["artifact"][
+                        "routed_reference_count"
+                    ],
+                    "forced_legacy_reference_count": candidate["artifact"][
+                        "forced_legacy_reference_count"
+                    ],
+                    "legacy_excluded_reference_count": candidate["artifact"][
+                        "legacy_excluded_reference_count"
+                    ],
+                },
+            },
         },
         "status": "PASS" if not critical_failures else "FAIL",
         "baseline": baseline,
@@ -623,12 +796,90 @@ def run_self_test(args: argparse.Namespace) -> int:
             "verification-honesty",
         }
         detected = expected_failures.issubset(set(result["critical_failures"]))
+
+        legacy_only_skill = Path(temp_dir) / "legacy-only"
+        legacy_references = legacy_only_skill / "references"
+        legacy_references.mkdir(parents=True)
+        (legacy_only_skill / "SKILL.md").write_text(
+            "---\n"
+            "name: production-delivery-orchestrator\n"
+            "description: 用于模糊故障修复和生产级交付，不适用于普通问答。\n"
+            "---\n"
+            "# 路由入口\n\n"
+            "`references/system-prompt.md` 仅供旧客户端兼容，不是模块化路由。\n",
+            encoding="utf-8",
+        )
+        (legacy_references / "system-prompt.md").write_text(
+            "独立审查；只读审查；Builder；修复后复验；P0/P1。\n",
+            encoding="utf-8",
+        )
+        legacy_artifact = load_artifact(legacy_only_skill, "legacy-only-self-test")
+        review_check = next(
+            check for check in rubric["checks"] if check["id"] == "independent-review-loop"
+        )
+        legacy_result = evaluate_check(legacy_artifact, review_check, fixture, rubric)
+        legacy_routing_detected = not legacy_result.passed
+
+        modular_skill = Path(temp_dir) / "modular-route"
+        modular_references = modular_skill / "references"
+        modular_references.mkdir(parents=True)
+        (modular_skill / "SKILL.md").write_text(
+            "---\n"
+            "name: production-delivery-orchestrator\n"
+            "description: 用于模糊故障修复和生产级交付，不适用于普通问答。\n"
+            "---\n"
+            "需要独立审查时读取 `references/review-contract.md`。\n",
+            encoding="utf-8",
+        )
+        (modular_references / "review-contract.md").write_text(
+            "独立审查；只读审查；Builder；修复后复验；P0/P1。\n",
+            encoding="utf-8",
+        )
+        modular_artifact = load_artifact(modular_skill, "modular-route-self-test")
+        modular_result = evaluate_check(modular_artifact, review_check, fixture, rubric)
+        modular_routing_detected = (
+            modular_result.passed
+            and len(modular_artifact.routed_reference_paths) == 1
+            and not modular_artifact.forced_legacy_reference_paths
+        )
+
+        (legacy_only_skill / "SKILL.md").write_text(
+            "---\n"
+            "name: production-delivery-orchestrator\n"
+            "description: 用于模糊故障修复和生产级交付，不适用于普通问答。\n"
+            "---\n"
+            "必须完整读取 `references/system-prompt.md`。\n",
+            encoding="utf-8",
+        )
+        forced_baseline_artifact = load_artifact(
+            legacy_only_skill,
+            "forced-legacy-baseline-self-test",
+            allow_forced_legacy_protocol=True,
+        )
+        forced_baseline_result = evaluate_check(
+            forced_baseline_artifact, review_check, fixture, rubric
+        )
+        forced_baseline_detected = (
+            forced_baseline_result.passed
+            and len(forced_baseline_artifact.forced_legacy_reference_paths) == 1
+            and not forced_baseline_artifact.legacy_excluded_reference_paths
+        )
+
+        detected = (
+            detected
+            and legacy_routing_detected
+            and modular_routing_detected
+            and forced_baseline_detected
+        )
         print(
             json.dumps(
                 {
                     "self_test": "PASS" if detected else "FAIL",
                     "expected_failures": sorted(expected_failures),
                     "detected_failures": result["critical_failures"],
+                    "legacy_only_capability_rejected": legacy_routing_detected,
+                    "modular_reference_capability_reached": modular_routing_detected,
+                    "forced_baseline_legacy_reached": forced_baseline_detected,
                     "llm_calls": 0,
                 },
                 ensure_ascii=False,

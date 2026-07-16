@@ -48,6 +48,13 @@ jobs:
           python evals/production-delivery-orchestrator/run_forward_tests.py --self-test
           python evals/production-delivery-orchestrator/run_forward_tests.py --verify-record evals/production-delivery-orchestrator/reports/forward-tests.json
 
+      - name: Run forward-test security and evidence tests
+        run: >-
+          python -m unittest discover
+          -s evals/production-delivery-orchestrator/tests
+          -p "test_*.py"
+          -v
+
       - name: Confirm known-bad candidate is rejected
         run: >-
           python -c "import subprocess, sys;

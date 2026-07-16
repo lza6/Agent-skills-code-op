@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2026-07-16T19:44:08.914350+00:00",
+    "generated_at": "2026-07-16T20:29:36.461126+00:00",
     "evaluation_mode": "offline_static_and_behavior_proxy",
     "llm_calls": 0,
     "disclaimer": "本评测不调用 LLM，不证明真实智能体已经遵守技能；它只检查提示词架构、规则覆盖、触发边界代理、fixture 侦察和完成门。",
@@ -8,13 +8,27 @@
     "rubric_file": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\rubric.yaml",
     "baseline_git_ref": "b3d9a17",
     "input_hashes": {
-      "runner_sha256": "e3ad33cfc68a4547229ee48883cdf453dad30a7619fe081d86ef279b8cabea56",
-      "rubric_sha256": "34091d53918b0e5300409df35e6e760ec889aa04845549d1d8c540159650e0da",
+      "runner_sha256": "f7f9fc17a821969cc3b59c3b77c59c7304f0fc9c11ce397e40246191ca3c808c",
+      "rubric_sha256": "5067714d439d5a3d200134a0d2cf605d92150b8e56ae58d978f1efba67059a35",
       "cases_sha256": "b5aa79fc63cddb8e4eda85fa3efefa4088d1b51dd8193db3e77e4d6e19f9dd09",
       "candidate_content_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
-      "baseline_content_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6"
+      "baseline_content_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6",
+      "candidate_capability_text_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
+      "baseline_capability_text_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6"
     },
-    "evaluation_fingerprint": "c0b41f29f4aef7335cb63170c06b7f9f2198f6847d953405c4266f452a0b8285"
+    "evaluation_fingerprint": "a05ecd201e8929c953985fc33d090d09c63b308b7aacf483c4cd566ab00dc2a9",
+    "capability_routing": {
+      "baseline": {
+        "routed_reference_count": 1,
+        "forced_legacy_reference_count": 1,
+        "legacy_excluded_reference_count": 0
+      },
+      "candidate": {
+        "routed_reference_count": 0,
+        "forced_legacy_reference_count": 0,
+        "legacy_excluded_reference_count": 0
+      }
+    }
   },
   "status": "FAIL",
   "baseline": {
@@ -23,8 +37,19 @@
       "source": "git:b3d9a17:skills/production-delivery-orchestrator",
       "core_path": "git:b3d9a17:skills/production-delivery-orchestrator/SKILL.md",
       "reference_count": 2,
-      "default_context_chars": 20822,
-      "content_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6"
+      "routed_reference_count": 1,
+      "routed_reference_paths": [
+        "skills/production-delivery-orchestrator/references/outcome-contract.md"
+      ],
+      "forced_legacy_reference_count": 1,
+      "forced_legacy_reference_paths": [
+        "skills/production-delivery-orchestrator/references/system-prompt.md"
+      ],
+      "legacy_excluded_reference_count": 0,
+      "legacy_excluded_reference_paths": [],
+      "default_context_chars": 19631,
+      "content_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6",
+      "capability_text_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6"
     },
     "score": 40.0,
     "checks": [
@@ -90,6 +115,8 @@
         "critical": true,
         "weight": 9,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "提交：命中",
           "入队|队列：命中",
           "处理|worker|消费者：命中",
@@ -105,6 +132,8 @@
         "critical": false,
         "weight": 7,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "信息密度|专业程度：缺失",
           "不重复询问：缺失",
           "技术约束：缺失",
@@ -118,8 +147,10 @@
         "critical": true,
         "weight": 10,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "本地修改|安全的本地：缺失",
-          "生产部署|生产环境：命中",
+          "生产部署|生产环境|生产操作：命中",
           "付费|真实费用：命中",
           "外部写入|远程：命中",
           "明确授权|审批边界：命中"
@@ -132,6 +163,8 @@
         "critical": true,
         "weight": 7,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "只授权分析|分析.*授权：命中",
           "不修改|只读：命中",
           "诊断|根因证据：命中"
@@ -144,6 +177,8 @@
         "critical": true,
         "weight": 10,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "独立.*审查|审查.*独立：命中",
           "只读.*审查|审查.*只读：命中",
           "主线程|主执行者|实现者|Builder：命中",
@@ -158,6 +193,8 @@
         "critical": true,
         "weight": 10,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "未执行.*不得.*通过|不得把未执行：命中",
           "验证证据：命中",
           "退出码|测试结果|运行结果：命中",
@@ -171,6 +208,8 @@
         "critical": false,
         "weight": 5,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "Quick：命中",
           "简单任务|低风险：命中",
           "最小.*测试|定向测试：命中",
@@ -197,7 +236,7 @@
         "critical": true,
         "weight": 7,
         "evidence": [
-          "默认强制上下文字数代理：20822",
+          "默认强制上下文字数代理：19631",
           "上限：12000",
           "该数值不等同于 tokenizer 精确 token 数。"
         ]
@@ -209,6 +248,8 @@
         "critical": true,
         "weight": 5,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "未提交|已有改动：命中",
           "不重置|不覆盖|保护工作区：缺失",
           "无关改动|范围外修改：缺失"
@@ -221,6 +262,8 @@
         "critical": true,
         "weight": 4,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "私密思维链|<thinking>：命中",
           "计划|关键证据：命中",
           "不输出|不得输出：命中"
@@ -233,6 +276,8 @@
         "critical": true,
         "weight": 4,
         "evidence": [
+          "能力可达文本：SKILL.md + 1 个模块化 routed references + 1 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "README|日志：命中",
           "数据|证据：命中",
           "提示注入：缺失",
@@ -257,8 +302,15 @@
       "source": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\baselines\\legacy-monolithic-proxy.md",
       "core_path": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\baselines\\legacy-monolithic-proxy.md",
       "reference_count": 0,
+      "routed_reference_count": 0,
+      "routed_reference_paths": [],
+      "forced_legacy_reference_count": 0,
+      "forced_legacy_reference_paths": [],
+      "legacy_excluded_reference_count": 0,
+      "legacy_excluded_reference_paths": [],
       "default_context_chars": 348,
-      "content_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728"
+      "content_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
+      "capability_text_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728"
     },
     "score": 15.8,
     "checks": [
@@ -324,6 +376,8 @@
         "critical": true,
         "weight": 9,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "提交：命中",
           "入队|队列：缺失",
           "处理|worker|消费者：缺失",
@@ -339,6 +393,8 @@
         "critical": false,
         "weight": 7,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "信息密度|专业程度：缺失",
           "不重复询问：缺失",
           "技术约束：缺失",
@@ -352,8 +408,10 @@
         "critical": true,
         "weight": 10,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "本地修改|安全的本地：缺失",
-          "生产部署|生产环境：命中",
+          "生产部署|生产环境|生产操作：命中",
           "付费|真实费用：命中",
           "外部写入|远程：缺失",
           "明确授权|审批边界：缺失"
@@ -366,6 +424,8 @@
         "critical": true,
         "weight": 7,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "只授权分析|分析.*授权：缺失",
           "不修改|只读：缺失",
           "诊断|根因证据：缺失"
@@ -378,6 +438,8 @@
         "critical": true,
         "weight": 10,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "独立.*审查|审查.*独立：缺失",
           "只读.*审查|审查.*只读：缺失",
           "主线程|主执行者|实现者|Builder：缺失",
@@ -392,6 +454,8 @@
         "critical": true,
         "weight": 10,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "未执行.*不得.*通过|不得把未执行：命中",
           "验证证据：缺失",
           "退出码|测试结果|运行结果：缺失",
@@ -405,6 +469,8 @@
         "critical": false,
         "weight": 5,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "Quick：缺失",
           "简单任务|低风险：缺失",
           "最小.*测试|定向测试：缺失",
@@ -443,6 +509,8 @@
         "critical": true,
         "weight": 5,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "未提交|已有改动：缺失",
           "不重置|不覆盖|保护工作区：缺失",
           "无关改动|范围外修改：缺失"
@@ -455,6 +523,8 @@
         "critical": true,
         "weight": 4,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "私密思维链|<thinking>：缺失",
           "计划|关键证据：命中",
           "不输出|不得输出：缺失"
@@ -467,6 +537,8 @@
         "critical": true,
         "weight": 4,
         "evidence": [
+          "能力可达文本：SKILL.md + 0 个模块化 routed references + 0 个 baseline 强制 legacy references",
+          "Legacy exclusion：无",
           "README|日志：缺失",
           "数据|证据：缺失",
           "提示注入：缺失",
@@ -492,7 +564,7 @@
     "score_delta": -24.2,
     "required_delta": 5,
     "candidate_min_score": 82,
-    "context_reduction_percent": 98.3,
+    "context_reduction_percent": 98.2,
     "required_context_reduction_percent": 50
   },
   "fixture": {

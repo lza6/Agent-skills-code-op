@@ -193,11 +193,9 @@ def update_managed_file(path: Path, preamble: str, dry_run: bool) -> None:
     block = managed_block()
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
 
-    if START_MARKER in existing or END_MARKER in existing:
-        if existing.count(START_MARKER) != 1 or existing.count(END_MARKER) != 1:
-            raise RuntimeError(f"{path} 中的受管标记格式错误")
-        start = existing.index(START_MARKER)
-        end = existing.index(END_MARKER, start) + len(END_MARKER)
+    span = managed_block_span(path, existing)
+    if span is not None:
+        start, end = span
         updated = existing[:start] + block + existing[end:]
     else:
         prefix = existing.rstrip()
@@ -213,49 +211,63 @@ def update_managed_file(path: Path, preamble: str, dry_run: bool) -> None:
     path.write_text(updated, encoding="utf-8", newline="\n")
 
 
+def managed_block_span(path: Path, existing: str) -> tuple[int, int] | None:
+    start_count = existing.count(START_MARKER)
+    end_count = existing.count(END_MARKER)
+    if start_count == 0 and end_count == 0:
+        return None
+    if start_count != 1 or end_count != 1:
+        raise RuntimeError(f"{path} 中的受管标记格式错误")
+
+    start = existing.index(START_MARKER)
+    end_start = existing.index(END_MARKER)
+    if start >= end_start:
+        raise RuntimeError(f"{path} 中的受管标记格式错误：结束标记必须位于开始标记之后")
+    return start, end_start + len(END_MARKER)
+
+
 def preflight_managed_file(path: Path) -> None:
     if not path.exists():
         return
     existing = path.read_text(encoding="utf-8")
-    if START_MARKER in existing or END_MARKER in existing:
-        if existing.count(START_MARKER) != 1 or existing.count(END_MARKER) != 1:
-            raise RuntimeError(f"{path} 中的受管标记格式错误")
+    managed_block_span(path, existing)
 
 
-def bridge_specs(project_dir: Path) -> dict[str, tuple[Path, str]]:
+def bridge_specs() -> dict[str, tuple[Path, str]]:
     cursor_preamble = """---
 description: 对软件任务应用生产级交付编排器
 globs:
 alwaysApply: true
 ---"""
     return {
-        "agents-md": (project_dir / "AGENTS.md", ""),
-        "claude-md": (project_dir / "CLAUDE.md", ""),
-        "gemini-md": (project_dir / "GEMINI.md", ""),
-        "copilot": (project_dir / ".github" / "copilot-instructions.md", ""),
+        "agents-md": (Path("AGENTS.md"), ""),
+        "claude-md": (Path("CLAUDE.md"), ""),
+        "gemini-md": (Path("GEMINI.md"), ""),
+        "copilot": (Path(".github") / "copilot-instructions.md", ""),
         "cursor": (
-            project_dir / ".cursor" / "rules" / f"{SKILL_NAME}.mdc",
+            Path(".cursor") / "rules" / f"{SKILL_NAME}.mdc",
             cursor_preamble,
         ),
         "windsurf": (
-            project_dir / ".windsurf" / "rules" / f"{SKILL_NAME}.md",
+            Path(".windsurf") / "rules" / f"{SKILL_NAME}.md",
             "",
         ),
         "cline": (
-            project_dir / ".clinerules" / f"{SKILL_NAME}.md",
+            Path(".clinerules") / f"{SKILL_NAME}.md",
             "",
         ),
     }
 
 
-def resolve_custom_bridge(project_dir: Path, value: Path) -> Path:
+def resolve_bridge(project_dir: Path, value: Path) -> Path:
     if value.is_absolute():
-        raise ValueError(f"自定义桥接必须使用项目相对路径，当前为：{value}")
-    resolved = (project_dir / value).resolve()
+        raise ValueError(f"桥接必须使用项目相对路径，当前为：{value}")
+    project_dir = project_dir.resolve(strict=False)
+    resolved = (project_dir / value).resolve(strict=False)
     try:
         resolved.relative_to(project_dir)
     except ValueError as exc:
-        raise ValueError(f"自定义桥接越出了项目目录：{value}") from exc
+        raise ValueError(f"桥接越出了项目目录：{value}") from exc
     return resolved
 
 
@@ -275,10 +287,13 @@ def main() -> int:
     destinations = [
         target_base(args.scope, target, project_dir) / SKILL_NAME for target in targets
     ]
-    specs = bridge_specs(project_dir)
-    selected_bridges = [specs[bridge] for bridge in bridges]
+    specs = bridge_specs()
+    selected_bridges = [
+        (resolve_bridge(project_dir, specs[bridge][0]), specs[bridge][1])
+        for bridge in bridges
+    ]
     custom_bridges = [
-        (resolve_custom_bridge(project_dir, value), "") for value in args.custom_bridge
+        (resolve_bridge(project_dir, value), "") for value in args.custom_bridge
     ]
 
     for destination in destinations:
