@@ -24,7 +24,7 @@
 
 - 技术与入口：单技能 Agent Skills 仓库；入口为 `skills/production-delivery-orchestrator/SKILL.md`，附 Python 安装器和 GitHub/npx 安装说明。
 - 相关模块：`SKILL.md`、`references/`、`agents/openai.yaml`、`scripts/install_skill.py`、`evals/production-delivery-orchestrator/`、`README.md`。
-- 工作区状态：远程 `main` 为 `b3fffeb`；本地 `d6476d7` 已修复首次最终推送暴露的跨平台问题，状态文档待提交再推送。
+- 工作区状态：远程 `main` 的代码/文档基线 `da956fb` 已通过双 OS CI；本文件用于持久化最终完成状态。
 - 关键约束：核心渐进披露；同批 baseline/candidate 评测；只读 Critic；不把未执行检查写成通过。
 - 重大假设及反转条件：当前仓库只发布一个技能；若安装器或 `npx skills` 真实行为与 README 不符，必须以运行结果修正文档。
 
@@ -42,7 +42,7 @@
 | N8 | 提交并推送 GitHub | passed | N7 | Git 历史与远程 | 提交成功、远程 main 可见 | git status/log/remote、远程发现、云端 CI | 功能提交 `0cf30f2` 已推送；Ubuntu/Windows CI 成功；npx 发现新 description | 不改写历史 |
 | N9 | 严格 1–9 项目识别与参考对标报告 | passed | N8 | `docs/` | 主项目、参考筛选、差距、迁移、路线图、实施和未知项均有证据 | 文档结构、路径和需求矩阵检查 | `docs/project-benchmark-analysis.md`、`docs/reference-scan-report.md` | 删除本批文档 |
 | N10 | 安装器与 forward/eval 证据安全加固 | passed | N9 | installer、forward、eval、tests、CI | symlink 不越界、报告脱敏、记录强校验、legacy 不代打 | 8 项安装测试、6 项 forward 测试、eval 三类 self-test | 主线程统一验证通过；提交 `000ff40` | 回退提交 `000ff40` |
-| N11 | 持久化独立 Critic、修复复验和再次发布 | in_progress | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | R12/R13 已由原 Critic 复验 Closed；等待再次推送和双 OS CI | 不改写历史 |
+| N11 | 持久化独立 Critic、修复复验和再次发布 | passed | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | R12/R13 Closed；Actions `29537377916` 双 OS success | 不改写历史 |
 
 ## 风险与决策
 
@@ -82,6 +82,8 @@
 | V14 | N11 | Canonical hash、15 项 forward 测试、新 fresh-context Agent、record、git archive、cp1252 | passed | 提交 `d6476d7`，artifact `02c95241…8458` | 新鲜 | 修复后双 OS CI 待推送 |
 | V15 | N11 | 同一 Critic 反向复验 R12/R13 | passed | `/root/final_critic_completion_audit` | 新鲜 | 新增 P0/P1 为 0，Verdict `Approve` |
 | V16 | N11 | 再推送前全套：官方校验、11+15 单测、forward self/record/NOT_RUN、eval、archive/cp1252、链接、fixture RED、diff/cache | passed | 状态文档工作树，2026-07-17 | 新鲜 | 验证生成的单个 `__pycache__` 已核对路径并安全清理 |
+| V17 | N11 | 修复后 GitHub Actions Ubuntu/Windows 完整矩阵 | passed | Run `29537377916`，SHA `da956fb` | 新鲜 | 两个 job 和全部适用步骤均 success |
+| V18 | N11 | GitHub 远程技能发现 | passed | `npx.cmd -y skills add https://github.com/lza6/Agent-skills-code-op --list` | 新鲜 | 发现 1 个技能：`production-delivery-orchestrator`；未执行安装 |
 
 ## 目标追踪
 
@@ -113,9 +115,9 @@
 
 ## 当前结论
 
-- 当前阶段：再次推送跨平台修复并验证双 OS CI。
-- 已完成：项目识别、参考扫描、1–9 报告、安全加固、F1/F2/R12/R13 修复、三轮真实 forward-test 和两轮原 Critic `Approve`。
+- 当前阶段：完成。
+- 已完成：项目识别、参考扫描、1–9 报告、安全加固、F1/F2/R12/R13 修复、三轮真实 forward-test、两轮原 Critic `Approve` 和双 OS CI。
 - 当前主节点：N11。
-- 下一步：提交状态文档并再次推送；观察修复后的 Ubuntu/Windows CI，核对远程 SHA、npx 发现和工作树。
-- 未验证项：本批改动的双 OS 云端 CI、远程推送和 Claude Code 真实行为仍未执行。
+- 下一步：无必需实施节点；仅保留 P2 路线图与客户端真实行为扩展。
+- 未验证项：Claude Code、Cursor、Gemini CLI 等真实模型行为未执行；仅验证格式、安装和桥接兼容。
 - 剩余边界：格式/安装兼容不等于所有客户端行为一致；历史大提交没有逐规则消融证据，本报告已诚实披露。
