@@ -39,7 +39,7 @@
 | N5 | 跨 CLI 安装器与全面中文 README | passed | N2 | `README.md`、`install_skill.py`、安装测试、CI | 真实临时安装、重复保护、引用完整性和七类桥接通过 | 4 个 stdlib 集成测试；Windows/Linux CI 配置 | 实装、force、越界拒绝、不完整源和文件目标保护均通过 | 备份改名与恢复 |
 | N6 | 主线程初步整合与验证 | passed | N2,N3 | 全仓库 | 结构、YAML、安装、eval、远程发现和两次 forward-test有实际证据 | 实际命令和退出码 | 初验完成；Critic 发现评测表述与 CI 覆盖缺口 | 按失败证据最小修复 |
 | N7 | 独立 Critic 审查、主线程修复、原 Critic 复验 | passed | N6 | 当前 diff 与验证证据 | 六维审查通过，P0/P1 为零 | 独立只读 Agent | 原 Critic 复验 F1-F5 全部 Closed，Verdict Approve | 仅修复已确认问题 |
-| N8 | 提交并推送 GitHub | in_progress | N7 | Git 历史与远程 | 提交成功、远程 main 可见 | git status/log/remote 核对 | 最终完成门验证后提交 | 不改写历史 |
+| N8 | 提交并推送 GitHub | passed | N7 | Git 历史与远程 | 提交成功、远程 main 可见 | git status/log/remote、远程发现、云端 CI | 功能提交 `0cf30f2` 已推送；Ubuntu/Windows CI 成功；npx 发现新 description | 不改写历史 |
 
 ## 风险与决策
 
@@ -62,6 +62,7 @@
 | V5 | N5 | 4 个 TemporaryDirectory 真实安装集成测试；`--force`、七桥接、越界和不完整源 | passed | 最终安装器与测试 | 新鲜 | 云端 Windows/Linux CI 需推送后观察 |
 | V6 | N3,N4 | 两个独立新上下文 forward-test；持久记录校验；harness synthetic self-test | passed | 本轮临时仓库与 `forward-tests.json` | 新鲜 | 精确模型/采样配置和原始工具 trace 不可见，已披露 |
 | V7 | N2-N7 | 官方技能校验、4 项安装测试、forward self/record/NOT_RUN、eval self/candidate/known-bad、fixture RED、YAML/引用/报告一致性、diff/缓存检查 | passed | 最终候选工作树 | 新鲜 | 云端 CI 只能在推送后观察 |
+| V8 | N8 | 远程 SHA、`npx skills --list`、GitHub Actions Ubuntu/Windows | passed | 功能提交 `0cf30f2` | 新鲜 | Actions: `29529506078`，两个矩阵任务均 success |
 
 ## 审查循环
 
@@ -77,9 +78,9 @@
 
 ## 当前结论
 
-- 当前阶段：最终完成门与 GitHub 推送。
+- 当前阶段：完成。
 - 已完成：轻量核心、八个模块化契约、全面中文 README、真实安装测试、真实 Git 基线 eval、两次独立新上下文 forward-test、两轮 Critic 和最终本地完成门。
-- 当前主节点：N8。
-- 下一步：重跑最终全套验证，提交、推送并核对远程技能描述。
-- 未验证项：Windows/Linux GitHub Actions 云端结果、最终 GitHub 推送与推送后远程描述核对。
+- 当前主节点：无；全部节点已通过。
+- 下一步：用户可通过仓库 URL、`npx skills` 或 Python 安装器安装使用。
+- 未验证项：无阻塞项；不同客户端是否隐式自动调用仍取决于其版本和配置，README 已提供显式调用与桥接降级。
 - 剩余边界：静态 eval 只能证明规则结构；真实 forward-test 仍受未暴露模型版本和临时 fixture 规模限制。
