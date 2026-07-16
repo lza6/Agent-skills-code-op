@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -123,6 +124,65 @@ EXPECTED_RECORDED_CASES: dict[str, dict[str, Any]] = {
         },
     },
 }
+
+ARTIFACT_HASH_DOMAIN = b"production-delivery-orchestrator-artifact-v1\0"
+ARTIFACT_IGNORED_DIRECTORIES = {"__pycache__"}
+ARTIFACT_IGNORED_FILES = {".DS_Store"}
+ARTIFACT_IGNORED_SUFFIXES = {".pyc"}
+
+
+def skill_artifact_files(skill_dir: Path) -> list[Path]:
+    """Return deterministic regular files that form the complete skill artifact."""
+
+    if not skill_dir.is_dir():
+        raise FileNotFoundError(f"技能目录不存在或不是目录: {skill_dir}")
+
+    files: list[Path] = []
+
+    def raise_walk_error(error: OSError) -> None:
+        raise error
+
+    for root, directory_names, file_names in os.walk(
+        skill_dir, topdown=True, onerror=raise_walk_error, followlinks=False
+    ):
+        root_path = Path(root)
+        included_directories: list[str] = []
+        for name in directory_names:
+            if name in ARTIFACT_IGNORED_DIRECTORIES:
+                continue
+            path = root_path / name
+            if path.is_symlink():
+                raise OSError(f"完整技能 artifact 不允许符号链接目录: {path}")
+            included_directories.append(name)
+        directory_names[:] = included_directories
+        for name in file_names:
+            path = root_path / name
+            if (
+                name in ARTIFACT_IGNORED_FILES
+                or path.suffix.lower() in ARTIFACT_IGNORED_SUFFIXES
+            ):
+                continue
+            if path.is_symlink():
+                raise OSError(f"完整技能 artifact 不允许符号链接文件: {path}")
+            if stat.S_ISREG(path.lstat().st_mode):
+                files.append(path)
+
+    return sorted(files, key=lambda path: path.relative_to(skill_dir).as_posix())
+
+
+def skill_artifact_sha256(skill_dir: Path) -> str:
+    """Hash relative POSIX paths and bytes with length framing to avoid ambiguity."""
+
+    digest = hashlib.sha256()
+    digest.update(ARTIFACT_HASH_DOMAIN)
+    for path in skill_artifact_files(skill_dir):
+        relative_path = path.relative_to(skill_dir).as_posix().encode("utf-8")
+        content = path.read_bytes()
+        digest.update(len(relative_path).to_bytes(8, byteorder="big"))
+        digest.update(relative_path)
+        digest.update(len(content).to_bytes(8, byteorder="big"))
+        digest.update(content)
+    return digest.hexdigest()
 
 
 def redact_text(text: str) -> str:
@@ -435,19 +495,43 @@ def validate_record(data: Any) -> list[str]:
         if candidate.get("skill_path") != "skills/production-delivery-orchestrator":
             errors.append("candidate.skill_path 不匹配")
         execution_hash = candidate.get("skill_sha256_at_execution")
-        if not isinstance(execution_hash, str) or not (
+        execution_hash_valid = isinstance(execution_hash, str) and bool(
             re.fullmatch(r"[0-9a-f]{64}", execution_hash)
-            or execution_hash
-            == "unavailable - the runtime did not expose a read-time artifact hash"
-        ):
-            errors.append("candidate.skill_sha256_at_execution 无效")
+        )
+        if not execution_hash_valid:
+            errors.append(
+                "candidate.skill_sha256_at_execution 必须是执行时完整技能 artifact 的 SHA-256；"
+                "unavailable 不能作为严格 PASS 证据"
+            )
         current_hash = candidate.get("current_skill_sha256_when_recorded")
-        if not isinstance(current_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", current_hash):
+        current_hash_valid = isinstance(current_hash, str) and bool(
+            re.fullmatch(r"[0-9a-f]{64}", current_hash)
+        )
+        if not current_hash_valid:
             errors.append("candidate.current_skill_sha256_when_recorded 无效")
+        try:
+            actual_hash = skill_artifact_sha256(SKILL_DIR)
+        except OSError as exc:
+            errors.append(
+                "无法计算当前完整技能 artifact SHA-256: "
+                f"{type(exc).__name__}: {redact_text(str(exc))}"
+            )
         else:
-            actual_hash = hashlib.sha256((SKILL_DIR / "SKILL.md").read_bytes()).hexdigest()
-            if current_hash != actual_hash:
-                errors.append("candidate.current_skill_sha256_when_recorded 与当前技能不匹配")
+            if execution_hash_valid and execution_hash != actual_hash:
+                errors.append(
+                    "candidate.skill_sha256_at_execution 已陈旧或与当前完整技能 artifact 不匹配"
+                )
+            if current_hash_valid and current_hash != actual_hash:
+                errors.append(
+                    "candidate.current_skill_sha256_when_recorded 已陈旧或与当前完整技能 "
+                    "artifact 不匹配"
+                )
+            if (
+                execution_hash_valid
+                and current_hash_valid
+                and execution_hash != current_hash
+            ):
+                errors.append("candidate 的执行时与记录时完整技能 artifact hash 不匹配")
 
     cases = data.get("cases")
     if not isinstance(cases, list):

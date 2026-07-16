@@ -259,16 +259,20 @@ alwaysApply: true
     }
 
 
-def resolve_bridge(project_dir: Path, value: Path) -> Path:
+def resolve_project_path(project_dir: Path, value: Path, kind: str) -> Path:
     if value.is_absolute():
-        raise ValueError(f"桥接必须使用项目相对路径，当前为：{value}")
+        raise ValueError(f"{kind}必须使用项目相对路径，当前为：{value}")
     project_dir = project_dir.resolve(strict=False)
     resolved = (project_dir / value).resolve(strict=False)
     try:
         resolved.relative_to(project_dir)
     except ValueError as exc:
-        raise ValueError(f"桥接越出了项目目录：{value}") from exc
+        raise ValueError(f"{kind}越出了项目目录：{value}") from exc
     return resolved
+
+
+def resolve_bridge(project_dir: Path, value: Path) -> Path:
+    return resolve_project_path(project_dir, value, "桥接")
 
 
 def main() -> int:
@@ -284,9 +288,13 @@ def main() -> int:
     if (bridges or args.custom_bridge) and "agents" not in targets:
         targets.append("agents")
 
-    destinations = [
-        target_base(args.scope, target, project_dir) / SKILL_NAME for target in targets
-    ]
+    destinations = []
+    for target in targets:
+        destination = target_base(args.scope, target, project_dir) / SKILL_NAME
+        if args.scope == "project":
+            relative_destination = destination.relative_to(project_dir)
+            resolve_project_path(project_dir, relative_destination, "安装目标")
+        destinations.append(destination)
     specs = bridge_specs()
     selected_bridges = [
         (resolve_bridge(project_dir, specs[bridge][0]), specs[bridge][1])
