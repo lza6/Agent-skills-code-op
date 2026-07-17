@@ -203,6 +203,31 @@ class PortableReportPathTest(unittest.TestCase):
             after["metadata"]["evaluation_fingerprint"],
         )
 
+    def test_collaboration_contract_is_routed_and_detects_missing_ownership_rules(
+        self,
+    ) -> None:
+        rubric = RUNNER.load_json_yaml(EVAL_DIR / "rubric.yaml")
+        check = next(
+            item
+            for item in rubric["checks"]
+            if item["id"] == "collaboration-merge-isolation"
+        )
+        fixture = RUNNER.analyze_fixture(RUNNER.DEFAULT_FIXTURE)
+        current = RUNNER.load_artifact(RUNNER.DEFAULT_CANDIDATE, "current")
+        self.assertTrue(
+            RUNNER.evaluate_check(current, check, fixture, rubric).passed
+        )
+
+        with tempfile.TemporaryDirectory(prefix="pdo-collaboration-contract-") as temp:
+            candidate = Path(temp) / "candidate"
+            shutil.copytree(RUNNER.DEFAULT_CANDIDATE, candidate)
+            contract = candidate / "references" / "collaboration-contract.md"
+            contract.write_text("只说明协作，不提供所有权或合并规则。\n", encoding="utf-8")
+            weakened = RUNNER.load_artifact(candidate, "weakened")
+            self.assertFalse(
+                RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
+            )
+
     def test_cli_summary_redacts_external_output_directory(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-cli-summary-") as temp:
             private_output = Path(temp) / "PrivateReportOwner"

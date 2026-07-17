@@ -143,6 +143,16 @@ cases:
     must_not:
       - 伪造审查线程或 Critic 结果
 
+  - id: multi-agent-safe-merge
+    prompt: 用三个 Agent 并行完成视频任务状态机修复、测试补齐和文档更新，再合并结果。
+    context: 状态机和测试目录可拆分；workflow 状态、发布元数据和最终文档是共享文件。
+    must:
+      - 父线程维护共享状态、最终合并和跨模块验证
+      - 只并行只读任务或拥有不重叠文件范围的子任务
+      - 将共享文件和范围重叠工作转为单一所有者串行处理
+    must_not:
+      - 允许多个子任务并发写 workflow 状态、发布元数据或同一文件
+
   - id: dirty-worktree
     prompt: 修复视频轮询问题，保留我当前没提交的 UI 改动。
     context: 目标文件附近存在用户未提交差异。

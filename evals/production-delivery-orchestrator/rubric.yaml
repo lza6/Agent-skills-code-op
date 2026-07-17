@@ -91,6 +91,14 @@
       "patterns": ["独立.*审查|审查.*独立", "只读.*审查|审查.*只读", "主线程|主执行者|实现者|Builder", "复验|重新审查", "P0/P1"]
     },
     {
+      "id": "collaboration-merge-isolation",
+      "title": "多 Agent 协作只并行只读或不重叠写入，并由父线程合并共享状态",
+      "weight": 8,
+      "critical": true,
+      "kind": "capability",
+      "patterns": ["父线程|主线程", "共享状态", "允许写入", "禁止写入", "不重叠|无重叠", "串行核对"]
+    },
+    {
       "id": "verification-honesty",
       "title": "没有新鲜证据时不得声称完成或通过",
       "weight": 10,
@@ -172,6 +180,7 @@
     "similar-bug-scan": ["discovery-before-questions", "permission-boundaries"],
     "deep-independent-review": ["independent-review-loop", "verification-honesty"],
     "multi-agent-unavailable": ["independent-review-loop", "verification-honesty"],
+    "multi-agent-safe-merge": ["collaboration-merge-isolation", "independent-review-loop"],
     "dirty-worktree": ["workspace-protection"],
     "non-software-request": ["trigger-boundary"],
     "simple-code-explanation": ["trigger-boundary"],
