@@ -18,7 +18,7 @@ import sys
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 
@@ -30,6 +30,64 @@ DEFAULT_BASELINE_GIT_REF = "b3d9a17"
 DEFAULT_SKILL_RELATIVE_PATH = "skills/production-delivery-orchestrator"
 LEGACY_SYSTEM_PROMPT = "references/system-prompt.md"
 REFERENCE_LINK_PATTERN = r"references/[A-Za-z0-9_.\-/]+\.md"
+
+
+def _portable_pure_path(path: str | Path) -> PurePosixPath | PureWindowsPath:
+    """Parse either Windows or POSIX path syntax without depending on the host OS."""
+
+    text = str(path)
+    if re.match(r"^(?:[A-Za-z]:[\\/]|\\\\)", text) or "\\" in text:
+        return PureWindowsPath(text)
+    return PurePosixPath(text)
+
+
+def _portable_relative_path(
+    path: str | Path, root: str | Path
+) -> PurePosixPath | PureWindowsPath | None:
+    parsed_path = _portable_pure_path(path)
+    parsed_root = _portable_pure_path(root)
+    if type(parsed_path) is not type(parsed_root):
+        return None
+    try:
+        return parsed_path.relative_to(parsed_root)
+    except ValueError:
+        return None
+
+
+def display_path(
+    path: str | Path,
+    *,
+    repo_root: str | Path = REPO_ROOT,
+    external_label: str = "path",
+    external_root: str | Path | None = None,
+) -> str:
+    """Return a deterministic report path without exposing the host filesystem.
+
+    Repository paths are POSIX-style and repository-relative. Git object paths
+    already carry a portable source identifier and are preserved. Files outside
+    the repository use an explicit, stable ``external:<label>`` namespace; when
+    an external root is supplied, only the path relative to that root is shown.
+    """
+
+    text = str(path)
+    if text.startswith("git:"):
+        return text
+
+    repo_relative = _portable_relative_path(text, repo_root)
+    if repo_relative is not None:
+        return repo_relative.as_posix()
+
+    parsed = _portable_pure_path(text)
+    if not parsed.is_absolute() and ".." not in parsed.parts:
+        return parsed.as_posix()
+
+    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "-", external_label).strip("-.")
+    prefix = f"external:{safe_label or 'path'}"
+    if external_root is not None:
+        external_relative = _portable_relative_path(text, external_root)
+        if external_relative is not None and external_relative.parts:
+            return f"{prefix}/{external_relative.as_posix()}"
+    return prefix
 
 
 @dataclass
@@ -46,6 +104,7 @@ class Artifact:
     forced_legacy_reference_paths: list[str]
     legacy_excluded_reference_paths: list[str]
     default_context_chars: int
+    tree_sha256: str
 
 
 @dataclass
@@ -219,6 +278,8 @@ def load_artifact(
         core_path = path
         root = path.parent
 
+    display_root = root
+
     if not core_path.is_file():
         raise FileNotFoundError(f"{label} 缺少 SKILL.md 或 Markdown 文件：{path}")
 
@@ -228,8 +289,18 @@ def load_artifact(
     reference_texts: list[str] = []
     references_dir = root / "references"
     if core_path.name == "SKILL.md" and references_dir.is_dir():
-        for reference in sorted(references_dir.rglob("*.md")):
-            reference_paths.append(str(reference))
+        references = sorted(
+            references_dir.rglob("*.md"),
+            key=lambda reference: reference.relative_to(root).as_posix(),
+        )
+        for reference in references:
+            reference_paths.append(
+                display_path(
+                    reference,
+                    external_label=label,
+                    external_root=display_root,
+                )
+            )
             reference_texts.append(reference.read_text(encoding="utf-8"))
 
     (
@@ -251,8 +322,16 @@ def load_artifact(
 
     return Artifact(
         label=label,
-        source=str(path),
-        core_path=str(core_path),
+        source=display_path(
+            path,
+            external_label=label,
+            external_root=display_root,
+        ),
+        core_path=display_path(
+            core_path,
+            external_label=label,
+            external_root=display_root,
+        ),
         core_text=core_text,
         all_text="\n".join([core_text, *reference_texts]),
         capability_text="\n".join([core_text, *capability_reference_texts]),
@@ -262,6 +341,7 @@ def load_artifact(
         forced_legacy_reference_paths=forced_legacy_reference_paths,
         legacy_excluded_reference_paths=legacy_excluded_reference_paths,
         default_context_chars=calculate_default_context_chars(core_text, forced_legacy_texts),
+        tree_sha256=sha256_path_tree(path),
     )
 
 
@@ -276,6 +356,19 @@ def run_git(*args: str) -> str:
     )
     if result.returncode != 0:
         raise ValueError(result.stderr.strip() or f"git {' '.join(args)} 执行失败")
+    return result.stdout
+
+
+def run_git_bytes(*args: str) -> bytes:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        message = result.stderr.decode("utf-8", errors="replace").strip()
+        raise ValueError(message or f"git {' '.join(args)} 执行失败")
     return result.stdout
 
 
@@ -313,6 +406,17 @@ def load_git_artifact(
         for path, text in zip(reference_paths, reference_texts)
         if path in forced_legacy_reference_paths
     ]
+    artifact_names = run_git(
+        "ls-tree", "-r", "--name-only", ref, "--", skill_relative_path
+    ).splitlines()
+    artifact_entries = []
+    prefix = f"{skill_relative_path.rstrip('/')}/"
+    for name in artifact_names:
+        relative_name = name[len(prefix) :] if name.startswith(prefix) else name
+        if should_hash_relative_path(relative_name):
+            artifact_entries.append(
+                (relative_name, run_git_bytes("show", f"{ref}:{name}"))
+            )
     return Artifact(
         label=label,
         source=f"git:{ref}:{skill_relative_path}",
@@ -326,6 +430,7 @@ def load_git_artifact(
         forced_legacy_reference_paths=forced_legacy_reference_paths,
         legacy_excluded_reference_paths=legacy_excluded_reference_paths,
         default_context_chars=calculate_default_context_chars(core_text, forced_legacy_texts),
+        tree_sha256=sha256_tree_entries(artifact_entries),
     )
 
 
@@ -339,6 +444,63 @@ def sha256_text(text: str) -> str:
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def canonical_tree_content(content: bytes) -> bytes:
+    """Normalize UTF-8 text EOLs while preserving binary bytes."""
+
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def should_hash_relative_path(relative_path: str) -> bool:
+    parts = PurePosixPath(relative_path.replace("\\", "/")).parts
+    return not (
+        relative_path.endswith((".pyc", ".pyo")) or "__pycache__" in parts
+    )
+
+
+def sha256_tree_entries(entries: list[tuple[str, bytes]]) -> str:
+    """Hash portable path/content entries independently of host path semantics."""
+
+    digest = hashlib.sha256()
+    digest.update(b"production-delivery-eval-tree-v1\0")
+    for relative_name, raw_content in sorted(
+        entries, key=lambda entry: entry[0].replace("\\", "/")
+    ):
+        relative_path = relative_name.replace("\\", "/").encode("utf-8")
+        content = canonical_tree_content(raw_content)
+        digest.update(len(relative_path).to_bytes(8, byteorder="big"))
+        digest.update(relative_path)
+        digest.update(len(content).to_bytes(8, byteorder="big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def sha256_path_tree(path: Path) -> str:
+    """Hash a file or directory tree with POSIX relative names."""
+
+    path = path.resolve()
+    if path.is_file():
+        return sha256_tree_entries([(path.name, path.read_bytes())])
+    entries = [
+        (candidate.relative_to(path).as_posix(), candidate.read_bytes())
+        for candidate in path.rglob("*")
+        if candidate.is_file()
+        and should_hash_relative_path(candidate.relative_to(path).as_posix())
+    ]
+    return sha256_tree_entries(entries)
+
+
+def sha256_directory(path: Path) -> str:
+    """Hash a directory tree by portable relative names and canonical content."""
+
+    if not path.is_dir():
+        raise ValueError(f"目录不存在：{path}")
+    return sha256_path_tree(path)
 
 
 def first_match_index(text: str, patterns: list[str]) -> tuple[int, str | None]:
@@ -374,6 +536,7 @@ def proxy_should_trigger(prompt: str, description: str) -> bool:
 
 
 def analyze_fixture(fixture_dir: Path) -> dict[str, Any]:
+    fixture_dir = fixture_dir.resolve()
     config = json.loads((fixture_dir / "fixture.json").read_text(encoding="utf-8"))
     files = {
         str(path.relative_to(fixture_dir)).replace("\\", "/"): path.read_text(
@@ -408,6 +571,11 @@ def analyze_fixture(fixture_dir: Path) -> dict[str, Any]:
     defect_detected = "failed" in backend_states and "failed" not in frontend_states
 
     return {
+        "source": display_path(
+            fixture_dir,
+            external_label="fixture",
+            external_root=fixture_dir,
+        ),
         "fixture": config["name"],
         "chain": chain,
         "chain_complete": all(chain.values()),
@@ -557,6 +725,7 @@ def evaluate_artifact(
             "default_context_chars": artifact.default_context_chars,
             "content_sha256": sha256_text(artifact.all_text),
             "capability_text_sha256": sha256_text(artifact.capability_text),
+            "tree_sha256": artifact.tree_sha256,
         },
         "score": score,
         "checks": [asdict(result) for result in results],
@@ -603,6 +772,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "> 本报告没有运行真实 LLM，不能证明智能体已经在真实任务中遵守技能。它只验证静态提示词架构、规则覆盖、触发边界代理和最小代码库 fixture。",
         "",
         "## 对比结果",
+        "",
+        f"- Baseline source：`{baseline['artifact']['source']}`",
+        f"- Candidate source：`{candidate['artifact']['source']}`",
         "",
         "| Artifact | Score | Critical failures |",
         "|---|---:|---|",
@@ -656,6 +828,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "",
             "## Fixture 侦察",
             "",
+            f"- Fixture source：`{fixture['source']}`",
             f"- 链路完整：`{fixture['chain_complete']}`",
             f"- 后端终态：`{fixture['backend_terminal_states']}`",
             f"- 前端终态：`{fixture['frontend_terminal_states']}`",
@@ -711,6 +884,9 @@ def run_evaluation(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
         "runner_sha256": sha256_file(Path(__file__)),
         "rubric_sha256": sha256_file(args.rubric),
         "cases_sha256": sha256_file(args.cases),
+        "fixture_content_sha256": sha256_directory(args.fixture.resolve()),
+        "candidate_tree_sha256": candidate["artifact"]["tree_sha256"],
+        "baseline_tree_sha256": baseline["artifact"]["tree_sha256"],
         "candidate_content_sha256": candidate["artifact"]["content_sha256"],
         "baseline_content_sha256": baseline["artifact"]["content_sha256"],
         "candidate_capability_text_sha256": candidate["artifact"][
@@ -729,8 +905,16 @@ def run_evaluation(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             "evaluation_mode": rubric["evaluation_mode"],
             "llm_calls": 0,
             "disclaimer": rubric["disclaimer"],
-            "cases_file": str(args.cases.resolve()),
-            "rubric_file": str(args.rubric.resolve()),
+            "cases_file": display_path(
+                args.cases.resolve(),
+                external_label="cases",
+                external_root=args.cases.resolve(),
+            ),
+            "rubric_file": display_path(
+                args.rubric.resolve(),
+                external_label="rubric",
+                external_root=args.rubric.resolve(),
+            ),
             "baseline_git_ref": baseline_ref,
             "input_hashes": input_hashes,
             "evaluation_fingerprint": evaluation_fingerprint,
@@ -939,8 +1123,16 @@ def main() -> int:
                     "context_reduction_percent"
                 ],
                 "critical_failures": report["critical_failures"],
-                "json_report": str(json_path.resolve()),
-                "markdown_report": str(markdown_path.resolve()),
+                "json_report": display_path(
+                    json_path.resolve(),
+                    external_label="report",
+                    external_root=args.output_dir.resolve(),
+                ),
+                "markdown_report": display_path(
+                    markdown_path.resolve(),
+                    external_label="report",
+                    external_root=args.output_dir.resolve(),
+                ),
                 "llm_calls": 0,
             },
             ensure_ascii=False,

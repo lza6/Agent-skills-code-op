@@ -1,22 +1,25 @@
 {
   "metadata": {
-    "generated_at": "2026-07-16T20:29:36.461126+00:00",
+    "generated_at": "2026-07-17T02:11:11.343325+00:00",
     "evaluation_mode": "offline_static_and_behavior_proxy",
     "llm_calls": 0,
     "disclaimer": "本评测不调用 LLM，不证明真实智能体已经遵守技能；它只检查提示词架构、规则覆盖、触发边界代理、fixture 侦察和完成门。",
-    "cases_file": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\cases.yaml",
-    "rubric_file": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\rubric.yaml",
+    "cases_file": "evals/production-delivery-orchestrator/cases.yaml",
+    "rubric_file": "evals/production-delivery-orchestrator/rubric.yaml",
     "baseline_git_ref": "b3d9a17",
     "input_hashes": {
-      "runner_sha256": "f7f9fc17a821969cc3b59c3b77c59c7304f0fc9c11ce397e40246191ca3c808c",
+      "runner_sha256": "c9e7fdf0d936629ae612edfe097d4e762bc417d3c2fa82dc0d5af9620e206527",
       "rubric_sha256": "5067714d439d5a3d200134a0d2cf605d92150b8e56ae58d978f1efba67059a35",
       "cases_sha256": "b5aa79fc63cddb8e4eda85fa3efefa4088d1b51dd8193db3e77e4d6e19f9dd09",
+      "fixture_content_sha256": "ef8c26f857e4402278d45ed6d724b7ca636bcb1b89aaf4ac227d49e2430f5ef3",
+      "candidate_tree_sha256": "ac153917ba546c7184ea4e1c90ce2779a4fc85ad5a10519096726bb46edd9847",
+      "baseline_tree_sha256": "c35b246e2c850358b6fec74eb42f5d1e8a21b16e29f83a538ca4a3621cad023f",
       "candidate_content_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
       "baseline_content_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6",
       "candidate_capability_text_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
       "baseline_capability_text_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6"
     },
-    "evaluation_fingerprint": "a05ecd201e8929c953985fc33d090d09c63b308b7aacf483c4cd566ab00dc2a9",
+    "evaluation_fingerprint": "955b398036874662515a60cde21d2764e4fbac48084e7c768e3801305c0aa94c",
     "capability_routing": {
       "baseline": {
         "routed_reference_count": 1,
@@ -49,7 +52,8 @@
       "legacy_excluded_reference_paths": [],
       "default_context_chars": 19631,
       "content_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6",
-      "capability_text_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6"
+      "capability_text_sha256": "adab3acc5b2f64f21c3e9b5144f5b4299759ef4f71ad1477a0ad2d779a151dc6",
+      "tree_sha256": "c35b246e2c850358b6fec74eb42f5d1e8a21b16e29f83a538ca4a3621cad023f"
     },
     "score": 40.0,
     "checks": [
@@ -299,8 +303,8 @@
   "candidate": {
     "artifact": {
       "label": "candidate",
-      "source": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\baselines\\legacy-monolithic-proxy.md",
-      "core_path": "C:\\Users\\Administrator.DESKTOP-EGNE9ND\\Desktop\\全能skills\\Agent-skills-code-op-repo\\evals\\production-delivery-orchestrator\\baselines\\legacy-monolithic-proxy.md",
+      "source": "evals/production-delivery-orchestrator/baselines/legacy-monolithic-proxy.md",
+      "core_path": "evals/production-delivery-orchestrator/baselines/legacy-monolithic-proxy.md",
       "reference_count": 0,
       "routed_reference_count": 0,
       "routed_reference_paths": [],
@@ -310,7 +314,8 @@
       "legacy_excluded_reference_paths": [],
       "default_context_chars": 348,
       "content_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
-      "capability_text_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728"
+      "capability_text_sha256": "abb871a20c44192d88d0539c9b624736b5b8eb4f30aceaffa1c50a3488790728",
+      "tree_sha256": "ac153917ba546c7184ea4e1c90ce2779a4fc85ad5a10519096726bb46edd9847"
     },
     "score": 15.8,
     "checks": [
@@ -568,6 +573,7 @@
     "required_context_reduction_percent": 50
   },
   "fixture": {
+    "source": "evals/production-delivery-orchestrator/fixtures/video-polling-state-machine",
     "fixture": "video-polling-state-machine",
     "chain": {
       "submit": true,

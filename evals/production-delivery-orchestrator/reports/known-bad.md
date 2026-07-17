@@ -1,15 +1,18 @@
 # Production Delivery Orchestrator 离线评测
 
-- 生成时间：`2026-07-16T20:29:36.461126+00:00`
+- 生成时间：`2026-07-17T02:11:11.343325+00:00`
 - 模式：`offline_static_and_behavior_proxy`
 - LLM 调用：`0`
 - Baseline Git ref：`b3d9a17`
-- 评测指纹：`a05ecd201e8929c953985fc33d090d09c63b308b7aacf483c4cd566ab00dc2a9`
+- 评测指纹：`955b398036874662515a60cde21d2764e4fbac48084e7c768e3801305c0aa94c`
 - 最终状态：**FAIL**
 
 > 本报告没有运行真实 LLM，不能证明智能体已经在真实任务中遵守技能。它只验证静态提示词架构、规则覆盖、触发边界代理和最小代码库 fixture。
 
 ## 对比结果
+
+- Baseline source：`git:b3d9a17:skills/production-delivery-orchestrator`
+- Candidate source：`evals/production-delivery-orchestrator/baselines/legacy-monolithic-proxy.md`
 
 | Artifact | Score | Critical failures |
 |---|---:|---|
@@ -197,6 +200,7 @@
 
 ## Fixture 侦察
 
+- Fixture source：`evals/production-delivery-orchestrator/fixtures/video-polling-state-machine`
 - 链路完整：`True`
 - 后端终态：`['completed', 'failed']`
 - 前端终态：`['completed']`
