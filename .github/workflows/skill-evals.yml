@@ -39,7 +39,17 @@ jobs:
           compile(Path('evals/production-delivery-orchestrator/run_forward_tests.py').read_text(encoding='utf-8'),
           'run_forward_tests.py', 'exec');
           compile(Path('evals/production-delivery-orchestrator/run_client_matrix.py').read_text(encoding='utf-8'),
-          'run_client_matrix.py', 'exec')"
+          'run_client_matrix.py', 'exec');
+          compile(Path('release/build_release.py').read_text(encoding='utf-8'),
+          'build_release.py', 'exec')"
+
+      - name: Build and verify release artifacts from metadata
+        run: >-
+          python release/build_release.py --output-dir .release-artifacts &&
+          python release/build_release.py --output-dir .release-artifacts --verify
+
+      - name: Run release builder tests
+        run: python -m unittest discover -s release/tests -p "test_*.py" -v
 
       - name: Run evaluation self-test
         run: python evals/production-delivery-orchestrator/run_evals.py --self-test

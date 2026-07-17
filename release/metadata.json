@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "skill": "production-delivery-orchestrator",
+  "version": "1.2.0",
+  "tag": "v1.2.0",
+  "title": "v1.2.0｜可恢复安装事务与可证明的自动发布",
+  "previous_release": "v1.1.0",
+  "release_notes": "docs/releases/v1.2.0.md",
+  "source_date": "2026-07-17",
+  "compatibility": {
+    "native_targets": [
+      "codex",
+      "claude-code",
+      "agent-skills"
+    ],
+    "bridge_targets": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      "GEMINI.md",
+      "GitHub Copilot",
+      "Cursor",
+      "Windsurf",
+      "Cline"
+    ]
+  },
+  "attestation": {
+    "provider": "github-attestation",
+    "required": true,
+    "subject": "release-zip",
+    "verify_command": "gh attestation verify <release-zip> --repo lza6/Agent-skills-code-op"
+  }
+}

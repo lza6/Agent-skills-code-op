@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  attestations: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.11"
+
+      - name: Verify annotated tag and release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${GITHUB_REF_NAME}^{tag}"
+          release_tag="$(python -c "import json; print(json.load(open('release/metadata.json', encoding='utf-8'))['tag'])")"
+          release_title="$(python -c "import json; print(json.load(open('release/metadata.json', encoding='utf-8'))['title'])")"
+          release_notes="$(python -c "import json; print(json.load(open('release/metadata.json', encoding='utf-8'))['release_notes'])")"
+          test "${GITHUB_REF_NAME}" = "${release_tag}"
+          test -f "${release_notes}"
+          echo "RELEASE_TITLE=${release_title}" >> "$GITHUB_ENV"
+          echo "RELEASE_COMMIT=$(git rev-parse "${GITHUB_REF_NAME}^{}")" >> "$GITHUB_ENV"
+
+      - name: Build and verify deterministic release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python release/build_release.py --output-dir dist --commit "${RELEASE_COMMIT}"
+          python release/build_release.py --output-dir dist --verify
+
+      - name: Attest release ZIP with GitHub Artifact Attestations
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: dist/production-delivery-orchestrator-${{ github.ref_name }}.zip
+
+      - name: Create Chinese GitHub Release and upload verified artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_notes="$(python -c "import json; print(json.load(open('release/metadata.json', encoding='utf-8'))['release_notes'])")"
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --title "${RELEASE_TITLE}" \
+            --notes-file "${release_notes}"
