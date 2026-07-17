@@ -1,5 +1,17 @@
 # Workflow Status
 
+## 当前运维加固任务契约（2026-07-17，目标 v1.2.0）
+
+- 目标：关闭多目标安装半完成风险；以机器可读元数据自动构建 Release 制品；通过 tag workflow 创建中文 Release 并为 ZIP 生成 GitHub Artifact Attestation。
+- 当前授权：用户明确授权按主题 commit、逐次 push、创建 GitHub Release；不重写 `v1.0.0`、`v1.0.1` 或 `v1.1.0` tag。
+- MUST 验收：
+  - 安装器失败和异常恢复不会留下半安装，且恢复拒绝被篡改、越界、符号链接或备份缺失的 journal；
+  - `release/metadata.json`、构建器、ZIP、checksum、provenance 与 Release 说明一致，构建器可离线复验；
+  - 精确三段版本的 annotated tag 触发 Release workflow，ZIP attestation、GitHub Release 附件和中文说明均可从远程复核；
+  - 每个主题独立 commit 并在推送前后验证，不把本地 hash 或未执行的 workflow 描述为已签名。
+- 当前状态：本地实现和回归验证进行中；`v1.2.0` 尚未创建 tag/Release，因此该版本当前不存在远程 attestation。
+- 回滚：安装事务失败自动补偿；发布出现问题时保留已发布 tag，通过新修复版本或安装 `v1.1.0` 回滚，不移动历史 tag。
+
 ## 当前发布任务契约（2026-07-17，v1.1.0）
 
 - 目标：将已完成的桥接规则、跨 CLI forward-test matrix、N13 审计文档和验证证据按主题提交并推送到 `main`，创建可核验的 `v1.1.0` tag 与 GitHub Release。
