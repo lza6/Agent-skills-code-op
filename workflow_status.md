@@ -5,7 +5,7 @@
 - 目标：将可选代码库盘点、Deep/高风险 Standard 的两阶段规格/质量审查、核心逻辑测试先行与遗留等价证据、定性歧义路由做成跨 CLI 的按需能力；扫描器绝不成为硬依赖。
 - 当前授权：用户已授权本仓库修改、分主题 commit/push、tag 和 GitHub Release；所有已发布 tag 保持不动。
 - MUST：扫描器仅文件名只读且可回退；Quick 不被升级；高风险审查前后两阶段可追踪；等价证据不能伪造 TDD；歧义不使用固定公式；削弱契约必须触发离线门禁；`v1.4.0` metadata、README、Release、checksum、provenance 与 attestation 一致。
-- 当前状态：实现与本地验证完成，待独立审查、分主题推送、annotated tag、远程 CI 与 Release 核验。`v1.3.0` 保留为直接回滚版本。
+- 当前状态：已完成。`v1.4.0` annotated tag 解引用到 `50404e1`；双平台门禁 [29595489302](https://github.com/lza6/Agent-skills-code-op/actions/runs/29595489302) 和发布工作流 [29595489333](https://github.com/lza6/Agent-skills-code-op/actions/runs/29595489333) 均成功。下载附件后 `--expected-commit` 复验、`gh attestation verify` 和 tagged `npx.cmd ... --list` 均通过；ZIP SHA-256 为 `c4da21a27dd2c02e9d16be8e8b20ee996c5fca5ceae0ac0ada9f1c2fb142a230`。`v1.3.0` 保留为直接回滚版本。
 
 ## 当前协作能力发布契约（2026-07-17，目标 v1.3.0）
 
