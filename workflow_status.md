@@ -5,7 +5,7 @@
 - 目标：更正 `v1.4.0` 发布说明中“技能安装/扫描器测试”的错误计数（23 → 25）；不改变技能代码，不移动 `v1.4.0` tag，并以新 Release 保留可验证的来源证明。
 - 当前授权：用户已授权按主题 commit/push、创建 annotated tag 和 GitHub Release；所有已发布 tag 保持不动。
 - MUST：README、metadata、Release、provenance、checksum 与 attestation 绑定 `v1.4.1`；新说明明确 `v1.4.0` 仍可回滚且其技能内容未修改；远程验证完成前不宣称 Release 已发布。
-- 当前状态：文档修正和本地验证完成，待独立主题提交、tag、远程 CI、Release 和附件核验。
+- 当前状态：已完成。`v1.4.1` annotated tag 解引用到 `addbd0a`；双平台门禁 [29595987264](https://github.com/lza6/Agent-skills-code-op/actions/runs/29595987264) 和发布工作流 [29595987251](https://github.com/lza6/Agent-skills-code-op/actions/runs/29595987251) 均成功。下载附件后 `--expected-commit` 复验、`gh attestation verify` 和 tagged `npx.cmd ... --list` 均通过；ZIP SHA-256 为 `c4da21a27dd2c02e9d16be8e8b20ee996c5fca5ceae0ac0ada9f1c2fb142a230`，本次 provenance 绑定新 tag/commit。`v1.4.0` 保留为直接回滚版本。
 
 ## 当前自适应交付能力发布契约（2026-07-17，目标 v1.4.0）
 
