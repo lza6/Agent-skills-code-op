@@ -115,6 +115,22 @@
       "patterns": ["未执行.*不得.*通过|不得把未执行", "验证证据", "退出码|测试结果|运行结果", "不得.*声称|不宣布完成"]
     },
     {
+      "id": "fresh-evidence-completion-gate",
+      "title": "L1/L2/L3 按风险使用当前新鲜证据作为完成门",
+      "weight": 9,
+      "critical": true,
+      "kind": "capability",
+      "patterns": ["L1", "L2", "L3", "完成门", "新鲜证据", "不要求.*全仓库|低风险.*L1", "失效", "未执行.*不等于通过"]
+    },
+    {
+      "id": "single-hypothesis-minimal-experiment",
+      "title": "根因未知时保留候选与反证，并用单一假设的最小实验收敛",
+      "weight": 8,
+      "critical": true,
+      "kind": "capability",
+      "patterns": ["候选集合", "反证", "单一假设", "最小实验", "支持观察", "证伪观察", "不得立即锁定根因"]
+    },
+    {
       "id": "proportional-workflow",
       "title": "简单任务不会被强制升级为大型工作流",
       "weight": 5,
@@ -184,6 +200,9 @@
     "fix-validation-loop": ["verification-honesty", "independent-review-loop"],
     "validation-environment-blocked": ["verification-honesty", "permission-boundaries"],
     "external-production-boundary": ["permission-boundaries", "verification-honesty"],
+    "l1-fresh-evidence-completion": ["fresh-evidence-completion-gate", "proportional-workflow"],
+    "l3-fresh-evidence-after-change": ["fresh-evidence-completion-gate", "verification-honesty"],
+    "single-hypothesis-minimal-experiment": ["single-hypothesis-minimal-experiment", "discovery-before-questions"],
     "quick-simple-fix": ["proportional-workflow"],
     "similar-bug-scan": ["discovery-before-questions", "permission-boundaries"],
     "deep-independent-review": ["independent-review-loop", "verification-honesty"],

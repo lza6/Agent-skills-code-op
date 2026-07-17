@@ -251,6 +251,52 @@ class PortableReportPathTest(unittest.TestCase):
                 RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
             )
 
+    def test_validation_contract_is_routed_and_detects_missing_completion_gate(self) -> None:
+        rubric = RUNNER.load_json_yaml(EVAL_DIR / "rubric.yaml")
+        check = next(
+            item
+            for item in rubric["checks"]
+            if item["id"] == "fresh-evidence-completion-gate"
+        )
+        fixture = RUNNER.analyze_fixture(RUNNER.DEFAULT_FIXTURE)
+        current = RUNNER.load_artifact(RUNNER.DEFAULT_CANDIDATE, "current")
+        self.assertTrue(
+            RUNNER.evaluate_check(current, check, fixture, rubric).passed
+        )
+
+        with tempfile.TemporaryDirectory(prefix="pdo-validation-contract-") as temp:
+            candidate = Path(temp) / "candidate"
+            shutil.copytree(RUNNER.DEFAULT_CANDIDATE, candidate)
+            contract = candidate / "references" / "validation-contract.md"
+            contract.write_text("只要求运行全部测试后宣布完成。\n", encoding="utf-8")
+            weakened = RUNNER.load_artifact(candidate, "weakened")
+            self.assertFalse(
+                RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
+            )
+
+    def test_discovery_contract_is_routed_and_detects_missing_experiment_rules(self) -> None:
+        rubric = RUNNER.load_json_yaml(EVAL_DIR / "rubric.yaml")
+        check = next(
+            item
+            for item in rubric["checks"]
+            if item["id"] == "single-hypothesis-minimal-experiment"
+        )
+        fixture = RUNNER.analyze_fixture(RUNNER.DEFAULT_FIXTURE)
+        current = RUNNER.load_artifact(RUNNER.DEFAULT_CANDIDATE, "current")
+        self.assertTrue(
+            RUNNER.evaluate_check(current, check, fixture, rubric).passed
+        )
+
+        with tempfile.TemporaryDirectory(prefix="pdo-discovery-contract-") as temp:
+            candidate = Path(temp) / "candidate"
+            shutil.copytree(RUNNER.DEFAULT_CANDIDATE, candidate)
+            contract = candidate / "references" / "discovery-contract.md"
+            contract.write_text("找到第一个匹配结果后立即修复。\n", encoding="utf-8")
+            weakened = RUNNER.load_artifact(candidate, "weakened")
+            self.assertFalse(
+                RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
+            )
+
     def test_cli_summary_redacts_external_output_directory(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-cli-summary-") as temp:
             private_output = Path(temp) / "PrivateReportOwner"
