@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import re
 import shutil
@@ -8,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
@@ -36,12 +39,43 @@ def run_installer(
     )
 
 
+def load_installer_module() -> object:
+    spec = importlib.util.spec_from_file_location("install_skill_test_module", INSTALLER)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("无法加载安装器模块")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 class InstallSkillIntegrationTest(unittest.TestCase):
     def _symlink_directory_or_skip(self, link: Path, target: Path) -> None:
         try:
             link.symlink_to(target, target_is_directory=True)
         except (NotImplementedError, OSError) as error:
             self.skipTest(f"当前环境不支持目录符号链接：{error}")
+
+    def _write_journal(
+        self,
+        installer: object,
+        project: Path,
+        state: str,
+        records: list[dict[str, object]],
+    ) -> Path:
+        transaction = installer.InstallTransaction(project)
+        transaction.backup_root.mkdir()
+        payload = {
+            "schema": 1,
+            "skill": SKILL_NAME,
+            "state": state,
+            "backup_dir": str(transaction.backup_root),
+            "records": records,
+            "created_directories": [],
+        }
+        transaction.journal_path.write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+        return transaction.journal_path
 
     def test_dry_run_does_not_create_project_or_installation_files(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-dry-run-test-") as temp:
@@ -325,6 +359,303 @@ class InstallSkillIntegrationTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 1)
             self.assertEqual(destination.read_text(encoding="utf-8"), "do not delete")
+
+    def test_multi_target_failure_restores_every_prior_target_and_bridge(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-transaction-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            existing_skill = (
+                project / ".codex" / "skills" / SKILL_NAME / "original.txt"
+            )
+            existing_skill.parent.mkdir(parents=True)
+            existing_skill.write_text("keep codex installation", encoding="utf-8")
+            bridge = project / "AGENTS.md"
+            original_bridge = "# Existing project instructions\n"
+            bridge.write_text(original_bridge, encoding="utf-8")
+
+            original_update = installer.update_managed_file_transaction
+
+            def fail_after_bridge(*args: object) -> None:
+                original_update(*args)
+                raise RuntimeError("simulated bridge write failure")
+
+            argv = [
+                str(INSTALLER),
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "all",
+                "--bridges",
+                "agents-md",
+                "--force",
+            ]
+            with (
+                mock.patch.object(sys, "argv", argv),
+                mock.patch.object(
+                    installer, "update_managed_file_transaction", fail_after_bridge
+                ),
+                self.assertRaisesRegex(RuntimeError, "simulated bridge write failure"),
+            ):
+                installer.main()
+
+            self.assertEqual(
+                existing_skill.read_text(encoding="utf-8"), "keep codex installation"
+            )
+            self.assertFalse((project / ".claude").exists())
+            self.assertFalse((project / ".agents").exists())
+            self.assertEqual(bridge.read_text(encoding="utf-8"), original_bridge)
+            self.assertFalse((project / installer.InstallTransaction.JOURNAL_FILE).exists())
+            self.assertFalse((project / installer.InstallTransaction.BACKUP_DIR).exists())
+
+    def test_recover_rolls_back_a_persisted_incomplete_transaction(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-recover-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            destination = project / ".agents" / "skills" / SKILL_NAME
+            transaction = installer.InstallTransaction(project)
+            transaction.begin()
+            transaction.snapshot(destination, "directory")
+            transaction.mark_applying()
+            installer.copy_skill_transaction(SKILL_ROOT, destination, transaction)
+            self.assertTrue((destination / "SKILL.md").is_file())
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+                "--recover",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse(destination.exists())
+            self.assertFalse((project / ".agents").exists())
+            self.assertFalse((project / installer.InstallTransaction.JOURNAL_FILE).exists())
+            self.assertFalse((project / installer.InstallTransaction.BACKUP_DIR).exists())
+
+    def test_existing_journal_blocks_new_install_without_destroying_recovery_data(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-existing-journal-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            journal = self._write_journal(installer, project, "prepared", [])
+            original = journal.read_bytes()
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("请先使用 --recover", result.stderr)
+            self.assertEqual(journal.read_bytes(), original)
+            self.assertTrue((project / installer.InstallTransaction.BACKUP_DIR).is_dir())
+            self.assertFalse((project / ".agents").exists())
+
+    def test_recover_rejects_tampered_journal_before_touching_outside_path(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-tampered-journal-test-") as temp:
+            root = Path(temp)
+            project = root / "project"
+            project.mkdir()
+            outside = root / "outside.txt"
+            outside.write_text("must survive", encoding="utf-8")
+            journal = self._write_journal(
+                installer,
+                project,
+                "applying",
+                [
+                    {
+                        "path": str(outside.absolute()),
+                        "kind": "file",
+                        "exists": False,
+                        "backup": None,
+                    }
+                ],
+            )
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+                "--recover",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("越出事务根目录", result.stderr)
+            self.assertEqual(outside.read_text(encoding="utf-8"), "must survive")
+            self.assertTrue(journal.exists())
+
+    def test_recover_rejects_missing_backup_before_touching_target(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-missing-backup-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            target = project / ".agents" / "skills" / SKILL_NAME
+            target.parent.mkdir(parents=True)
+            target.write_text("must survive", encoding="utf-8")
+            journal = self._write_journal(
+                installer,
+                project,
+                "applying",
+                [
+                    {
+                        "path": str(target.absolute()),
+                        "kind": "directory",
+                        "exists": True,
+                        "backup": "backups/00-directory",
+                    }
+                ],
+            )
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+                "--recover",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("事务备份不存在或不安全", result.stderr)
+            self.assertEqual(target.read_text(encoding="utf-8"), "must survive")
+            self.assertTrue(journal.exists())
+
+    def test_recover_rejects_tampered_journal_before_touching_unrelated_project_file(
+        self,
+    ) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-unrelated-journal-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            sentinel = project / "keep.txt"
+            sentinel.write_text("must survive", encoding="utf-8")
+            journal = self._write_journal(
+                installer,
+                project,
+                "applying",
+                [
+                    {
+                        "path": str(sentinel.absolute()),
+                        "kind": "file",
+                        "exists": False,
+                        "backup": None,
+                    }
+                ],
+            )
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+                "--recover",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("不属于本次恢复计划", result.stderr)
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "must survive")
+            self.assertTrue(journal.exists())
+
+    def test_recover_requires_explicit_scope_and_target_plan(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-explicit-recovery-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            target = project / ".codex" / "skills" / SKILL_NAME
+            target.mkdir(parents=True)
+            sentinel = target / "keep.txt"
+            sentinel.write_text("must survive", encoding="utf-8")
+            journal = self._write_journal(
+                installer,
+                project,
+                "applying",
+                [
+                    {
+                        "path": str(target.absolute()),
+                        "kind": "directory",
+                        "exists": False,
+                        "backup": None,
+                    }
+                ],
+            )
+
+            result = run_installer(
+                "--project-dir",
+                str(project),
+                "--recover",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("必须显式提供", result.stderr)
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "must survive")
+            self.assertTrue(journal.exists())
+
+    def test_recover_committed_journal_only_cleans_transaction_records(self) -> None:
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="pdo-committed-journal-test-") as temp:
+            project = Path(temp) / "project"
+            project.mkdir()
+            journal = self._write_journal(installer, project, "committed", [])
+            sentinel = project / "keep.txt"
+            sentinel.write_text("keep", encoding="utf-8")
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+                "--recover",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse(journal.exists())
+            self.assertFalse((project / installer.InstallTransaction.BACKUP_DIR).exists())
+            self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_dangling_internal_bridge_symlink_is_rejected_before_install(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-dangling-bridge-test-") as temp:
+            project = Path(temp)
+            bridge = project / "AGENTS.md"
+            try:
+                bridge.symlink_to(project / "managed-instructions.md")
+            except (NotImplementedError, OSError) as error:
+                self.skipTest(f"当前环境不支持文件符号链接：{error}")
+
+            result = run_installer(
+                "--scope",
+                "project",
+                "--project-dir",
+                str(project),
+                "--targets",
+                "agents",
+                "--bridges",
+                "agents-md",
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("符号链接", result.stderr)
+            self.assertTrue(bridge.is_symlink())
+            self.assertFalse((project / ".agents").exists())
 
 
 if __name__ == "__main__":
