@@ -9,7 +9,8 @@
   - `release/metadata.json`、构建器、ZIP、checksum、provenance 与 Release 说明一致，构建器可离线复验；
   - 精确三段版本的 annotated tag 触发 Release workflow，ZIP attestation、GitHub Release 附件和中文说明均可从远程复核；
   - 每个主题独立 commit 并在推送前后验证，不把本地 hash 或未执行的 workflow 描述为已签名。
-- 当前状态：本地实现和回归验证进行中；`v1.2.0` 尚未创建 tag/Release，因此该版本当前不存在远程 attestation。
+- 当前状态：已完成。三批主题提交 `f3ec20e`（安装事务）、`879f9f3`（制品构建和证明工作流）、`03ad1d9`（中文说明）均已推送；`v1.2.0` annotated tag 指向 `03ad1d9`。
+- 远程证据：双平台门禁 [29590997083](https://github.com/lza6/Agent-skills-code-op/actions/runs/29590997083) 成功；发布工作流 [29591153755](https://github.com/lza6/Agent-skills-code-op/actions/runs/29591153755) 成功；[GitHub Release v1.2.0](https://github.com/lza6/Agent-skills-code-op/releases/tag/v1.2.0) 已上传三份附件，下载后构建器复验、`gh attestation verify` 和 tagged `npx.cmd ... --list` 均通过。
 - 回滚：安装事务失败自动补偿；发布出现问题时保留已发布 tag，通过新修复版本或安装 `v1.1.0` 回滚，不移动历史 tag。
 
 ## 当前发布任务契约（2026-07-17，v1.1.0）
