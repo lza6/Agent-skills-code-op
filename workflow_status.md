@@ -5,7 +5,7 @@
 - 目标：将 L1/L2/L3 新鲜证据完成门和“单一假设、最小实验、保留反证”的诊断循环做成跨 CLI 的按需能力；低风险不被过度测试，诊断也不因单一假设过早收敛。
 - 当前授权：用户已授权本仓库修改、分主题 commit/push、tag 和 GitHub Release；所有已发布 tag 保持不动。
 - MUST：每个完成门证据关联当前变更、验收和失效条件；失效证据不能宣布完成；单一实验保留竞争候选和支持/证伪观察；弱化两个契约必须触发离线门禁；`v1.5.0` metadata、README、Release、checksum、provenance 与 attestation 一致。
-- 当前状态：实现与本地验证完成，待独立审查、分主题推送、annotated tag、远程 CI 与 Release 核验。`v1.4.1` 保留为直接回滚版本。
+- 当前状态：已完成。`v1.5.0` annotated tag 解引用到 `216dcaf`；双平台门禁 [29596828467](https://github.com/lza6/Agent-skills-code-op/actions/runs/29596828467) 和发布工作流 [29596828301](https://github.com/lza6/Agent-skills-code-op/actions/runs/29596828301) 均成功。下载附件后 `--expected-commit` 复验、`gh attestation verify` 和 tagged `npx.cmd ... --list` 均通过；ZIP SHA-256 为 `199f9fc66dd8739238c100588b3a1616838597ae5bd7cb0f41b724da6bf17c99`。`v1.4.1` 保留为直接回滚版本。
 
 ## 当前发布说明修正契约（2026-07-18，目标 v1.4.1）
 
