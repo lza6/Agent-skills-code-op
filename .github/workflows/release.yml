@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           python release/build_release.py --output-dir dist --commit "${RELEASE_COMMIT}"
-          python release/build_release.py --output-dir dist --verify
+          python release/build_release.py --output-dir dist --verify --expected-commit "${RELEASE_COMMIT}"
 
       - name: Attest release ZIP with GitHub Artifact Attestations
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0

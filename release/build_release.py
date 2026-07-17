@@ -53,6 +53,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="仅校验已有制品，不执行构建。",
     )
+    parser.add_argument(
+        "--expected-commit",
+        help="校验 provenance.commit 必须匹配的 40 位 Git SHA；仅与 --verify 一起使用。",
+    )
     return parser.parse_args()
 
 
@@ -317,7 +321,14 @@ def parse_checksums(path: Path) -> dict[str, str]:
     return entries
 
 
-def verify_release(metadata: dict[str, Any], output_dir: Path) -> None:
+def verify_release(
+    metadata: dict[str, Any],
+    output_dir: Path,
+    metadata_path: Path = DEFAULT_METADATA,
+    expected_commit: str | None = None,
+) -> None:
+    if expected_commit is not None and not re.fullmatch(r"[0-9a-f]{40}", expected_commit):
+        raise RuntimeError("expected_commit 必须是 40 位小写 Git SHA")
     names = artifact_names(metadata)
     paths = {key: output_dir / name for key, name in names.items()}
     missing = [str(path) for path in paths.values() if not path.is_file()]
@@ -338,12 +349,23 @@ def verify_release(metadata: dict[str, Any], output_dir: Path) -> None:
         expected = 2 if key == "schema" else metadata[key]
         if provenance.get(key) != expected:
             raise RuntimeError(f"provenance 字段不匹配：{key}")
+    if provenance.get("metadata_sha256") != sha256_file(metadata_path):
+        raise RuntimeError("provenance metadata SHA-256 不匹配")
+    provenance_commit = provenance.get("commit")
+    if not isinstance(provenance_commit, str) or not re.fullmatch(
+        r"[0-9a-f]{40}", provenance_commit
+    ):
+        raise RuntimeError("provenance commit 格式无效")
+    if expected_commit is not None and provenance_commit != expected_commit:
+        raise RuntimeError("provenance commit 与预期提交不匹配")
     artifact = provenance.get("artifact")
     if not isinstance(artifact, dict) or artifact.get("zip") != paths["zip"].name:
         raise RuntimeError("provenance artifact 信息无效")
     files = artifact.get("files")
     if not isinstance(files, list):
         raise RuntimeError("provenance 缺少 files manifest")
+    if artifact.get("file_count") != len(files):
+        raise RuntimeError("provenance file_count 不匹配")
 
     expected_names = [f"{metadata['skill']}/{entry['path']}" for entry in files]
     with zipfile.ZipFile(paths["zip"]) as archive:
@@ -372,9 +394,12 @@ def main() -> int:
     source_dir = (args.source_dir or (REPO_ROOT / "skills" / metadata["skill"])).resolve()
     output_dir = args.output_dir.resolve()
     if args.verify:
-        verify_release(metadata, output_dir)
+        verify_release(metadata, output_dir, metadata_path, args.expected_commit)
         print(f"PASS: 已校验 {metadata['tag']} 的 Release 制品")
         return 0
+
+    if args.expected_commit is not None:
+        raise RuntimeError("--expected-commit 只能与 --verify 一起使用")
 
     commit = args.commit or git_commit()
     assets = build_release(metadata, source_dir, output_dir, commit, metadata_path)

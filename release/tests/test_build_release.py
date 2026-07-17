@@ -38,8 +38,12 @@ class ReleaseBuilderTest(unittest.TestCase):
             second = self.builder.build_release(
                 self.metadata, SKILL_DIR, root / "second", TEST_COMMIT, METADATA_PATH
             )
-            self.builder.verify_release(self.metadata, root / "first")
-            self.builder.verify_release(self.metadata, root / "second")
+            self.builder.verify_release(
+                self.metadata, root / "first", METADATA_PATH, TEST_COMMIT
+            )
+            self.builder.verify_release(
+                self.metadata, root / "second", METADATA_PATH, TEST_COMMIT
+            )
             for key in ("zip", "provenance", "checksums"):
                 self.assertEqual(first[key].read_bytes(), second[key].read_bytes(), key)
 
@@ -53,6 +57,45 @@ class ReleaseBuilderTest(unittest.TestCase):
                 handle.write(b"tampered")
             with self.assertRaisesRegex(RuntimeError, "校验和不匹配"):
                 self.builder.verify_release(self.metadata, output)
+
+    def test_verifier_rejects_tampered_provenance_claims_after_checksum_rewrite(
+        self,
+    ) -> None:
+        cases = (
+            ("commit", "b" * 40, "commit 与预期提交"),
+            ("metadata_sha256", "0" * 64, "metadata SHA-256"),
+            ("artifact.file_count", 999, "file_count"),
+        )
+        with tempfile.TemporaryDirectory(prefix="pdo-provenance-tamper-") as temp:
+            root = Path(temp)
+            for index, (field, value, expected_error) in enumerate(cases):
+                with self.subTest(field=field):
+                    output = root / str(index)
+                    assets = self.builder.build_release(
+                        self.metadata, SKILL_DIR, output, TEST_COMMIT, METADATA_PATH
+                    )
+                    provenance = json.loads(
+                        assets["provenance"].read_text(encoding="utf-8")
+                    )
+                    if field == "artifact.file_count":
+                        provenance["artifact"]["file_count"] = value
+                    else:
+                        provenance[field] = value
+                    assets["provenance"].write_text(
+                        json.dumps(provenance, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
+                        newline="\n",
+                    )
+                    assets["checksums"].write_text(
+                        f"{self.builder.sha256_file(assets['zip'])} *{assets['zip'].name}\n"
+                        f"{self.builder.sha256_file(assets['provenance'])} *{assets['provenance'].name}\n",
+                        encoding="utf-8",
+                        newline="\n",
+                    )
+                    with self.assertRaisesRegex(RuntimeError, expected_error):
+                        self.builder.verify_release(
+                            self.metadata, output, METADATA_PATH, TEST_COMMIT
+                        )
 
     def test_metadata_rejects_non_release_semver_and_missing_attestation(self) -> None:
         broken = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
