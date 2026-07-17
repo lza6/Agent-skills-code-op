@@ -24,7 +24,7 @@
 
 - 技术与入口：单技能 Agent Skills 仓库；入口为 `skills/production-delivery-orchestrator/SKILL.md`，附 Python 安装器和 GitHub/npx 安装说明。
 - 相关模块：`SKILL.md`、`references/`、`agents/openai.yaml`、`scripts/install_skill.py`、`evals/production-delivery-orchestrator/`、`README.md`。
-- 工作区状态：GitHub Release `v1.0.0` 保持指向 `e5e3739`；N12 本地修复和两路原 Critic 复验已完成，main 正按主题分批推送，尚待最终 CI 和发布收口。
+- 工作区状态：GitHub Release `v1.0.1` 已发布为 Latest，annotated tag 指向 `9e8eb8c`；本文件是发布后的纯文档记账，不移动既有 tag。
 - 关键约束：核心渐进披露；同批 baseline/candidate 评测；只读 Critic；不把未执行检查写成通过。
 - 重大假设及反转条件：当前仓库只发布一个技能；若安装器或 `npx skills` 真实行为与 README 不符，必须以运行结果修正文档。
 
@@ -43,7 +43,7 @@
 | N9 | 严格 1–9 项目识别与参考对标报告 | passed | N8 | `docs/` | 主项目、参考筛选、差距、迁移、路线图、实施和未知项均有证据 | 文档结构、路径和需求矩阵检查 | `docs/project-benchmark-analysis.md`、`docs/reference-scan-report.md` | 删除本批文档 |
 | N10 | 安装器与 forward/eval 证据安全加固 | passed | N9 | installer、forward、eval、tests、CI | symlink 不越界、报告脱敏、记录强校验、legacy 不代打 | 8 项安装测试、6 项 forward 测试、eval 三类 self-test | 主线程统一验证通过；提交 `000ff40` | 回退提交 `000ff40` |
 | N11 | 持久化独立 Critic、修复复验和再次发布 | passed | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | R12/R13 Closed；Actions `29537377916` 双 OS success | 不改写历史 |
-| N12 | 增量参考库口径、eval 回归与状态证据收口 | in_progress | N11 | `docs/`、技能入口、eval/forward、CI、GitHub | 多口径不混用；跨平台指纹稳定；安装器路径可执行；原 Critic 复验；v1.0.1 可复现发布 | 数字/链接、23+11 单测、真实 Forward、`git diff --check`、双 OS CI、Release/tagged npx | A1-A8 Closed；A9 Release Gate Open | 回退 N12 分主题提交，不改写 `v1.0.0` 历史 |
+| N12 | 增量参考库口径、eval 回归与状态证据收口 | passed | N11 | `docs/`、技能入口、eval/forward、CI、GitHub | 多口径不混用；跨平台指纹稳定；安装器路径可执行；原 Critic 复验；v1.0.1 可复现发布 | 数字/链接、23+11 单测、真实 Forward、`git diff --check`、双 OS CI、Release/tagged npx | A1-A9 Closed；三名原 Critic 最终无 P0/P1 | 回退 N12 主题提交；不移动 `v1.0.1` tag |
 
 ## 风险与决策
 
@@ -65,7 +65,7 @@
 | R14 | 参考根 reparse、结构候选和 `rg` 可发现口径被混写，导致项目边界与排序依据失真 | P1 | 实际有 2,984 个顶层 reparse entries，而旧报告只强调 9 个符号链接并称其余为实体目录 | 重写扫描口径；加入边际增量/主项目覆盖降权和 tie-break；修正 frontmatter 与观察项 | 已解决；文档 Critic 复验 Closed |
 | R15 | Eval tree hash 受宿主排序影响，且 Candidate 文件重命名不使指纹失效 | P1 | Windows/POSIX 路径排序不同；拼接文本 hash 不含相对路径 | POSIX 相对名、canonical tree hash、Candidate/Baseline tree 指纹和 rename 回归 | 已解决；Eval Critic `PASS`、23/23 |
 | R16 | SKILL 安装器示例依赖错误 cwd；兼容长协议保留固定多 Agent/HTML/覆盖率冲突 | P1 | 从仓库根或用户项目照抄命令失败；显式全文模式会恢复旧刚性规则 | `<skill-dir>` 绝对定位；模块化契约优先级声明 | 已解决；文档 Critic复验 Closed |
-| R17 | README 的 `v1.0.1` 稳定安装和附件尚未在 GitHub 物化 | P1 | 远程目前只有 `v1.0.0`；新工作树无远程 CI | 分主题提交推送、双 OS CI、annotated tag、tag archive、checksum/provenance、远程安装验证 | 发布门禁 Open |
+| R17 | README 的 `v1.0.1` 稳定安装和附件尚未在 GitHub 物化 | P1 | 审计时远程只有 `v1.0.0`，新工作树无远程 CI | 分主题提交推送、双 OS CI、annotated tag、tag archive、checksum/provenance、远程安装验证 | 已解决；发布/文档 Critic `Approve` |
 
 ## 验证台账
 
@@ -92,7 +92,7 @@
 | V19 | N12 | 增量审计复核 reparse/入口计数、141/1,560 行数、`nopua` frontmatter、`spec-driven-eval` 和 16,102 并集算法 | passed | 2026-07-17 N12 工作树 | 新鲜 | 文档 Critic 复验 Closed；远程发布另见 R17 |
 | V20 | N12 | Eval/Forward `23/23`、Eval self-test、Candidate/Baseline/Known-bad、跨平台固定 tree hash、rename 指纹、报告与 stdout 脱敏 | passed | Latest `b0d725e3…dc30`；Known-bad `955b3980…94c` | 新鲜 | Eval Critic `PASS`；远程双 OS CI 待推送 |
 | V21 | N12 | 两个 fresh-context 真实 Forward：模糊修复与 analysis-only；主线程复验 diff、GREEN/RED、clean worktree；严格记录 | passed | artifact `7291cc43…b29d`，fixture `c275ff8` | 新鲜 | 精确模型/采样和完整工具 trace 不可见，已披露 |
-| V22 | N12 | GitHub 分主题提交、最终 SHA/Tag CI、annotated `v1.0.1`、Release 三附件、tagged npx | pending | 尚未执行 | N/A | 当前唯一 P1 发布门禁 |
+| V22 | N12 | 五个主题提交、最终分支/tag CI、annotated `v1.0.1`、Release 三附件、下载 checksum、provenance manifest、tagged npx、v1.0.0 回滚 | passed | release `9e8eb8c`；tag run `29550346228` | 新鲜 | tag 未签名、Release 非 immutable、无 branch protection 为 P2 |
 
 ## 目标追踪
 
@@ -104,7 +104,7 @@
 | P0/P1/P2 路线图和全栈方案 | 项目报告第 6–7 节 | 当前批和后续 P2 | 原 Critic `Approve` | passed |
 | 修改文件、兼容、验证、回滚 | 项目报告第 8 节 | 当前工作树 diff | V12 最终套件 | passed |
 | 需要补充的信息 | 项目报告第 9 节 | README 降级方式 | 非阻塞未知项披露 | passed |
-| 独立审查和修复复验 | `reviews/final-critic.md` | Builder 修复映射 | Eval Critic `PASS`；文档 Critic 仅保留 Release Gate | in_progress |
+| 独立审查和修复复验 | `reviews/final-critic.md` | Builder 修复映射 | Eval、文档、发布三个原 Critic 最终均无 P0/P1 | passed |
 
 ## 审查循环
 
@@ -120,16 +120,18 @@
 | 7 | N12 增量只读审计 | Request Changes | P0: 0；P1: A1 参考根口径错误、A2 当前事实/发布时序滞后 | 文档、eval 回归与状态节点分工修复中 | 等待独立 Critic 复验和发布后核对 |
 | 8 | `/root/eval_critic` | PASS | P0: 0；P1: 0 | 跨平台 tree hash、结构指纹、CLI 摘要脱敏 | 原问题全部 Closed；23/23 |
 | 9 | `/root/docs_critic` | Request Changes — Release Gated | P0: 0；P1: 仅 v1.0.1 尚未物化 | 安装路径、长协议优先级、16,102 算法均已修复 | 原问题 Closed；等待发布后原 Critic 签收 |
+| 10 | `/root/docs_critic` | Approve | P0: 0；P1: 0 | 复验 tag、Release、附件、CI、tagged npx 和 v1.0.0 回滚 | A9 Closed |
+| 11 | `/root/release_critic` | Approve | P0: 0；P1: 0 | 复验五次 push、tag peel、ZIP manifest、checksum/provenance 和供应链 digest | 原 4 个发布 P1 全部 Closed |
 
 ## 外部等待项
 
-无权限或凭证阻塞。当前只剩已获用户明确授权的 GitHub 发布链：分主题提交推送、远程 CI、annotated tag、Release 制品与 tagged 安装核对。
+无。
 
 ## 当前结论
 
-- 当前阶段：`release_gated`。
-- 已完成：N1–N11，包括安全加固、三轮真实 forward-test、历史 Critic `Approve`、双 OS CI 和 `v1.0.0` 发布。
-- 当前主节点：N12（`in_progress`）。
-- 下一步：按主题精确暂存、逐批提交并 push；最终双 OS CI 通过后创建 annotated `v1.0.1`、从 tag 构建/校验附件、验证 tagged npx，并交回原发布/文档 Critic 签收。
+- 当前阶段：完成。
+- 已完成：N1–N12，包括安全加固、五轮真实 Forward、三名原 Critic 最终签收、五个主题 push、双 OS 分支/tag CI 和 `v1.0.1` Release。
+- 当前主节点：N12（`passed`）。
+- 下一步：无必需实施节点；仅保留已披露的 P2 治理和更多客户端真实行为扩展。
 - 未验证项：Claude Code、Cursor、Gemini CLI 等真实模型行为未执行；仅验证格式、安装和桥接兼容。
 - 剩余边界：格式/安装兼容不等于所有客户端行为一致；历史大提交没有逐规则消融证据，本报告已诚实披露。
