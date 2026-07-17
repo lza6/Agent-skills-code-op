@@ -1,5 +1,12 @@
 # Workflow Status
 
+## 当前发布补丁契约（2026-07-17，目标 v1.2.1）
+
+- 目标：让 `main` 中已完成的 provenance 声明核验与 tag-commit 强绑定拥有对应的可复现 Release，而不是只停留在主分支。
+- 当前授权：用户已授权按主题 commit/push 和创建 Release；保留 `v1.0.0`、`v1.0.1`、`v1.1.0` 和 `v1.2.0` 作为历史/回滚 tag，绝不移动它们。
+- MUST：`v1.2.1` metadata、README、Release 说明、构建器和 tag 一致；ZIP 继续获得 GitHub Artifact Attestation；远端双平台 CI、Release workflow、下载复验和 attestation 验证均成功。
+- 当前状态：准备 tag；`v1.2.1` 尚未创建 Release。`v1.2.0` 的线上 Release 已保留且正文已勘误为带 `--targets all --bridges all` 的可执行恢复命令。
+
 ## 当前运维加固任务契约（2026-07-17，目标 v1.2.0）
 
 - 目标：关闭多目标安装半完成风险；以机器可读元数据自动构建 Release 制品；通过 tag workflow 创建中文 Release 并为 ZIP 生成 GitHub Artifact Attestation。
