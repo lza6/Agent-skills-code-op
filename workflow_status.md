@@ -1,5 +1,22 @@
 # Workflow Status
 
+## 当前复核任务契约（2026-07-17，N13+）
+
+- 目标：基于当前主仓库和 `C:\Users\Administrator.DESKTOP-EGNE9ND\.claude\skills` 的新鲜事实，重新完成项目识别、参考筛选、差距分析、跨技术栈迁移分级和 P0/P1/P2 设计；经独立只读 Critic 复验后提交用户批准，再决定是否实施新的代码改造。
+- 复杂度：Deep。
+- 当前授权：允许只读扫描、非破坏性验证、生成/更新分析文档与本状态文件；根据用户明确的“确认后再实施”门禁，当前不修改产品逻辑、安装器、评测器、CI 或发布资产。
+- MUST 验收标准：
+  - 主项目的类型、入口、模块、流程、配置、测试、部署和不适用项均有文件或运行证据；
+  - 参考根区分 `rg` 可发现数、顶层入口、reparse/junction、聚合技能和字面递归数，不混用统计口径；
+  - 高价值候选按业务相似度、架构价值、成熟度、可迁移性和边际增量排序；
+  - 形成可迁移/半可迁移/不建议迁移、P0/P1/P2 路线图、兼容/回滚/验证和未知项；
+  - 当前分析产物由独立只读 Critic 从六个维度审查，P0/P1 清零后才提交用户批准；
+  - 用户批准实施方向后，才新增实现批次和代码级 Critic 修复/复验循环。
+- 已确认事实：仓库是单技能 Agent Skills 分发、安装与评测项目；历史 N1–N12 和 `v1.0.1` 发布闭环保留为旧版本证据，不自动批准本轮新增变化。
+- 当前用户可见结果：本轮先得到证据化 1–9 分析、方案比较和明确批准门；没有批准前不会出现业务代码差异。
+- 停止条件：分析 Critic 通过后等待用户选择设计方向；或发现需要用户决定且会改变兼容性、发布范围、客户端矩阵或实施成本的阻塞项。
+- 历史说明：下方原“任务契约”及 N1–N12 记录属于上一轮已发布闭环；本节和 N13+ 是当前有效任务状态。
+
 ## 任务契约
 
 - 目标：把 `production-delivery-orchestrator` 升级为轻量核心、按需加载、自动仓库侦察、风险驱动验证和多 Agent 审查闭环的通用软件交付技能，并发布到 `lza6/Agent-skills-code-op`。
@@ -34,7 +51,7 @@
 |---|---|---|---|---|---|---|---|---|
 | N1 | 主仓库、参考技能和规则冲突审查 | passed | - | 全仓库、参考技能根目录 | 给出证据化 P0/P1/P2 与高价值参考 | 三个独立只读 Agent | Agent 审查回传 | 保留 `b3d9a17` |
 | N2 | 轻量核心状态机与按需路由 | passed | N1 | `SKILL.md`、`openai.yaml`、长协议入口 | 默认不全文加载长协议；触发边界清晰 | 官方结构验证、字符量、eval | `SKILL.md` 轻量且当前默认上下文代理较基线下降 76.7% | 回退单组规则并复测 |
-| N3 | 模块化发现、结果、计划、执行、验证、审查和状态契约 | passed | N1 | `references/` | 每个契约单一职责、中文、无 CLI 强绑定 | diff check、引用完整性、两次 forward-test | 八个按需 reference 均可解析 | 逐模块回退 |
+| N3 | 模块化发现、结果、计划、执行、验证、审查和状态契约 | passed | N1 | `references/` | 每个模块单一职责、中文、无 CLI 强绑定 | diff check、引用完整性、两次 forward-test | 七个模块化 reference（六个契约加一个状态 schema）和一个兼容 reference 均可解析 | 逐模块回退 |
 | N4 | 可执行离线评测与视频任务 fixture | passed | N1 | `evals/production-delivery-orchestrator/` | 静态映射不冒充场景执行；真实 Git 基线；真实 forward-test 可追溯 | runner 自测、baseline/candidate、坏候选、forward harness/记录 | 静态状态为 COVERED/UNCOVERED；报告含 SHA-256；真实记录校验通过 | 保留 `cases.yaml` 与 Git 基线 |
 | N5 | 跨 CLI 安装器与全面中文 README | passed | N2 | `README.md`、`install_skill.py`、安装测试、CI | 真实临时安装、重复保护、引用完整性和七类桥接通过 | 4 个 stdlib 集成测试；Windows/Linux CI 配置 | 实装、force、越界拒绝、不完整源和文件目标保护均通过 | 备份改名与恢复 |
 | N6 | 主线程初步整合与验证 | passed | N2,N3 | 全仓库 | 结构、YAML、安装、eval、远程发现和两次 forward-test有实际证据 | 实际命令和退出码 | 初验完成；Critic 发现评测表述与 CI 覆盖缺口 | 按失败证据最小修复 |
@@ -44,6 +61,11 @@
 | N10 | 安装器与 forward/eval 证据安全加固 | passed | N9 | installer、forward、eval、tests、CI | symlink 不越界、报告脱敏、记录强校验、legacy 不代打 | 8 项安装测试、6 项 forward 测试、eval 三类 self-test | 主线程统一验证通过；提交 `000ff40` | 回退提交 `000ff40` |
 | N11 | 持久化独立 Critic、修复复验和再次发布 | passed | N10 | `reviews/`、README、workflow、GitHub | 六维审查 P0/P1 为零，远程和双 OS CI 成功 | 同一 Critic 复验、Git/Actions/npx | R12/R13 Closed；Actions `29537377916` 双 OS success | 不改写历史 |
 | N12 | 增量参考库口径、eval 回归与状态证据收口 | passed | N11 | `docs/`、技能入口、eval/forward、CI、GitHub | 多口径不混用；跨平台指纹稳定；安装器路径可执行；原 Critic 复验；v1.0.1 可复现发布 | 数字/链接、23+11 单测、真实 Forward、`git diff --check`、双 OS CI、Release/tagged npx | A1-A9 Closed；三名原 Critic 最终无 P0/P1 | 回退 N12 主题提交；不移动 `v1.0.1` tag |
+| N13 | 当前工作树与参考根新鲜复核、代码库事实文档 | passed | N12 | `docs/codebase/`、既有分析报告、当前仓库、参考根 | 七份事实文档完整；主项目测试重跑；参考根统计独立复算 | scan、11+23 测试、eval/forward、结构计数、子 Agent 回传 | 本地验证、参考审计、主项目审计与文档修正完成 | 删除本轮文档增量，不改产品代码 |
+| N14 | 当前分析产物独立六维 Critic 与修复复验 | passed | N13 | `docs/codebase/`、分析报告、workflow | 需求/逻辑/边界/质量/覆盖/运行六维；P0/P1 为零 | 独立只读 Agent；主线程修正文档；原 Critic 复验 | `/root/n13_fast_critic` Verdict `Approve`，术语/快照细化后原 Critic `Reverify: Approve` | 仅回退未通过的分析文档改动 |
+| N15 | 用户批准架构与实施方向 | pending | N14 | 路线图与方案选项 | 用户明确批准一个方向或要求修订 | 用户确认 | 待执行 | N/A；未批准不实施 |
+| N16 | 按批准方向分批实施 | pending | N15 | 由批准方案决定 | 每批有文件清单、兼容、验证和回滚；不做无关重构 | 定向测试、接缝验证、必要 CI/行为验证 | 待批准 | 按批次回退 |
+| N17 | 实施后独立代码 Critic、修复与原 Critic 复验 | pending | N16 | 当前 diff 与新鲜运行证据 | 六维通过；P0/P1 清零 | 独立只读 Critic → 主线程修复 → 原 Critic 复验 | 待实施 | 回退未通过批次 |
 
 ## 风险与决策
 
@@ -66,6 +88,10 @@
 | R15 | Eval tree hash 受宿主排序影响，且 Candidate 文件重命名不使指纹失效 | P1 | Windows/POSIX 路径排序不同；拼接文本 hash 不含相对路径 | POSIX 相对名、canonical tree hash、Candidate/Baseline tree 指纹和 rename 回归 | 已解决；Eval Critic `PASS`、23/23 |
 | R16 | SKILL 安装器示例依赖错误 cwd；兼容长协议保留固定多 Agent/HTML/覆盖率冲突 | P1 | 从仓库根或用户项目照抄命令失败；显式全文模式会恢复旧刚性规则 | `<skill-dir>` 绝对定位；模块化契约优先级声明 | 已解决；文档 Critic复验 Closed |
 | R17 | README 的 `v1.0.1` 稳定安装和附件尚未在 GitHub 物化 | P1 | 审计时远程只有 `v1.0.0`，新工作树无远程 CI | 分主题提交推送、双 OS CI、annotated tag、tag archive、checksum/provenance、远程安装验证 | 已解决；发布/文档 Critic `Approve` |
+| R18 | 主分析报告仍有多处把 `v1.0.0` 写成当前发布，并称 tag 为 immutable | P1 | 本地 tag/HEAD 与 `gh release view v1.0.1` 显示当前稳定版为 `v1.0.1`，Release `isImmutable=false` | 区分历史基线、当前稳定版和发布治理边界；修正 N12 时序 | 已解决；等待 N14 复验 |
+| R19 | `writing-skills` 排名为高价值候选，但参考证据段缺少对应小节 | P2 | `docs/reference-scan-report.md` 排名表与证据段覆盖不一致 | 补充 frontmatter、Token/引用和 RED/GREEN 清单证据，并声明行号解析规则 | 已解决；等待 N14 复验 |
+| R20 | 分析文档把八个 reference 文件误写成“八个模块化契约再加兼容长协议” | P1 | 实际为六个 `*-contract`、一个状态 schema 和一个兼容长协议 | 统一为“七个模块化 reference（六个契约加一个 schema）+ 一个兼容协议” | 已解决；N14 原 Critic 复验通过 |
+| R21 | `.codebase-scan.txt` 创建于 N13 事实文档之前，不能作为当前扫描引用 | P1 | 旧快照漏列七份 `docs/codebase/*.md`，文件计数也过时 | 重建当前库存，记录范围、HEAD、排除项与可复跑命令 | 已解决；N14 原 Critic 复验通过 |
 
 ## 验证台账
 
@@ -93,6 +119,9 @@
 | V20 | N12 | Eval/Forward `23/23`、Eval self-test、Candidate/Baseline/Known-bad、跨平台固定 tree hash、rename 指纹、报告与 stdout 脱敏 | passed | Latest `b0d725e3…dc30`；Known-bad `955b3980…94c` | 新鲜 | Eval Critic `PASS`；远程双 OS CI 待推送 |
 | V21 | N12 | 两个 fresh-context 真实 Forward：模糊修复与 analysis-only；主线程复验 diff、GREEN/RED、clean worktree；严格记录 | passed | artifact `7291cc43…b29d`，fixture `c275ff8` | 新鲜 | 精确模型/采样和完整工具 trace 不可见，已披露 |
 | V22 | N12 | 五个主题提交、最终分支/tag CI、annotated `v1.0.1`、Release 三附件、下载 checksum、provenance manifest、tagged npx、v1.0.0 回滚 | passed | release `9e8eb8c`；tag run `29550346228` | 新鲜 | tag 未签名、Release 非 immutable、无 branch protection 为 P2 |
+| V23 | N13 | 本轮 Python 语法；安装器 `11/11`；eval/forward `23/23`；eval self-test；candidate `40.0→100.0`、上下文降低 `76.7%`；known-bad `15.8` 且预期 exit `1`；forward synthetic self-test；既有真实记录 verify；`git diff --check`；参考根六种结构口径复算 | passed | HEAD `6b376d85`，2026-07-17；临时报告未入库 | 新鲜 | synthetic self-test 不是模型行为；默认 eval 需要完整 Git 历史和 baseline `b3d9a17`；真实跨客户端矩阵未执行 |
+| V24 | N13 | 临时 branch coverage 诊断；本地 tag/远程 Release/资产；最新 HEAD 与 tag CI | passed | 两个 runner 合计 `82%`；`v1.0.1`→`9e8eb8c`；Release 非 draft/prerelease/immutable、3 个资产；Actions `29550854239` 与 `29550346228` success | 新鲜 | coverage 不含子进程安装器且未设门槛；远程检查不是新发布授权 |
+| V25 | N14 | 独立六维 Critic、主项目只读审计、修正后原 Critic 复验 | passed | Critic `Approve` → 术语与扫描快照细化 → `Reverify: Approve` | 新鲜 | P2：可将临时覆盖率原始产物与扫描 tree hash 作为后续治理工作；不阻塞分析批准门 |
 
 ## 目标追踪
 
@@ -129,9 +158,10 @@
 
 ## 当前结论
 
-- 当前阶段：完成。
-- 已完成：N1–N12，包括安全加固、五轮真实 Forward、三名原 Critic 最终签收、五个主题 push、双 OS 分支/tag CI 和 `v1.0.1` Release。
-- 当前主节点：N12（`passed`）。
-- 下一步：无必需实施节点；仅保留已披露的 P2 治理和更多客户端真实行为扩展。
-- 未验证项：Claude Code、Cursor、Gemini CLI 等真实模型行为未执行；仅验证格式、安装和桥接兼容。
-- 剩余边界：格式/安装兼容不等于所有客户端行为一致；历史大提交没有逐规则消融证据，本报告已诚实披露。
+- 当前阶段：本轮重新审计与设计探索已通过独立审查，未进入新增代码实施。
+- 历史已完成：N1–N12，包括安全加固、五轮真实 Forward、三名原 Critic 最终签收、双 OS CI 和 `v1.0.1` Release；这些证据继续有效于对应 tag/commit。
+- 当前主节点：N15（`pending`）。
+- 下一步：等待用户批准方案 A、B 或 C；推荐 B（评测器测试先行模块化），获批后才进入 N16。
+- 当前代码改动：无产品逻辑改动；新增 `docs/codebase/` 事实文档，并修正项目对标报告、参考扫描报告和本状态文件。
+- 未验证项：Claude Code、Cursor、Gemini CLI 等真实模型行为仍未执行；当前只复验本地 Python/CI 等价门和既有 forward 记录新鲜度。
+- 剩余边界：格式/安装兼容不等于所有客户端行为一致；静态 eval 100 分不等于 19 个 prompt 的真实 Agent 执行；P2 代码重构需用户明确批准。

@@ -106,6 +106,8 @@ literal_recursive_count = len(recursive | direct)  # 16_102
 
 ## 高价值参考证据
 
+本节中的 `SKILL.md:<line>` 均相对于当前候选标题解析，即 `<参考根>/<候选名>/SKILL.md:<line>`；这样既能定位原始证据，也不把本机绝对用户路径重复写入每一条引用。
+
 ### `skill-creator`
 
 - `SKILL.md:86-98`：三级渐进披露，核心正文建议少于 500 行。
@@ -138,6 +140,14 @@ literal_recursive_count = len(recursive | direct)  # 16_102
 - `SKILL.md:289`：条件等待优于固定 sleep。
 
 迁移：假设—证据—实验—结论和异步条件等待。拒绝无来源成功率和绝对“三次必定是架构问题”。
+
+### `writing-skills`
+
+- `SKILL.md:99-106`：frontmatter 必填字段、命名与触发描述约束。
+- `SKILL.md:217-290`：高频技能的 Token 预算、细节下沉、交叉引用替代重复和精简示例。
+- `SKILL.md:600-619`：以 RED/GREEN 清单验证技能，并要求 YAML Schema 与触发条件可检查。
+
+迁移：Token 预算、引用替代复制、frontmatter 约束和技能文档的可验证清单。拒绝把其中的固定字数阈值、专属工具名或绝对流程原样强加给所有客户端。
 
 ### `subagent-driven-development`
 

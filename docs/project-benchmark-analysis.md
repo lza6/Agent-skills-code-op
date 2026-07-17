@@ -16,14 +16,14 @@
 |---|---|---|---|
 | 项目类型 | 单技能 Agent Skills 分发、安装与评测仓库；不是 Web 服务、桌面端或传统 SDK | `README.md`、`SKILL.md`、仓库目录 | 高 0.99 |
 | 核心产品 | `production-delivery-orchestrator`，将模糊或复杂软件请求推进到可验证交付 | `skills/production-delivery-orchestrator/SKILL.md` | 高 0.99 |
-| 主交付语言 | Markdown；技能核心和八个按需契约均为 Markdown | `SKILL.md`、`references/*.md` | 高 0.99 |
+| 主交付语言 | Markdown；技能核心、七个模块化按需 reference（六个 `*-contract` 加一个状态 schema）和一个兼容长协议均为 Markdown | `SKILL.md`、`references/*.md` | 高 0.99 |
 | 编程语言 | Python 标准库用于安装、离线 eval 和 forward-test | `install_skill.py`、`run_evals.py`、`run_forward_tests.py` | 高 0.99 |
 | TypeScript/TSX | 仅用于故意带缺陷的视频轮询 fixture，不是真实产品前端 | `evals/.../fixtures/video-polling-state-machine` | 高 0.99 |
 | Python 框架 | 无；仅使用 `argparse/pathlib/subprocess/json/tempfile/unittest` 等标准库 | Python import 清单 | 高 0.99 |
 | 包管理 | N/A；无 pyproject/requirements/npm manifest。`npx skills` 是消费者安装渠道 | 仓库 manifest 搜索、README | 高 0.99 |
 | 构建方式 | N/A；无应用构建。CI 执行语法、测试、评测和 whitespace 检查 | `.github/workflows/skill-evals.yml` | 高 0.99 |
 | 运行入口 | Agent：`SKILL.md`；安装：`install_skill.py`；评测：`run_evals.py`；真实测试：`run_forward_tests.py` | 文件入口与 `main()` | 高 0.99 |
-| 模块划分 | 技能核心、客户端元数据、八个契约、兼容长协议、安装器、测试、eval、fixture、报告、CI | 仓库目录 | 高 0.99 |
+| 模块划分 | 技能核心、客户端元数据、七个模块化 reference（六个契约加一个状态 schema）、一个兼容长协议、安装器、测试、eval、fixture、报告、CI | 仓库目录 | 高 0.99 |
 | 核心流程 | 原生发现/显式调用/桥接 → 授权分类 → DISCOVER → ALIGN → PLAN → EXECUTE → VALIDATE → REVIEW → CLOSE | `SKILL.md` | 高 0.99 |
 | API | 真实业务 API：N/A；fixture 中 fetch 仅为测试样例 | 无服务框架/路由；fixture 文件 | 高 0.99 |
 | 数据访问 | N/A；无数据库、Schema、迁移或持久化层 | 全仓依赖与代码搜索 | 高 0.99 |
@@ -36,7 +36,7 @@
 | 前后端边界 | 真实产品无前后端；`agents/openai.yaml` 是客户端界面元数据，Python 是工具层 | 目录职责 | 高 0.99 |
 | 基础设施边界 | GitHub Actions 是唯一 CI 基础设施；无容器、K8s、Terraform | `.github/workflows` 与配置搜索 | 高 0.99 |
 
-已发布 `v1.0.0` 基线包含 38 个跟踪文件并指向 `e5e3739`。`SKILL.md` 为 141 行；兼容长协议 `references/system-prompt.md` 为 1,560 行。本轮 N12 增量审计从该发布基线出发，按主题推进后续 main 提交，最终由新的 immutable tag 收口。
+已发布的历史基线 `v1.0.0` 包含 38 个跟踪文件并指向 `e5e3739`；当前稳定版为 `v1.0.1`，annotated tag 解引用到 `9e8eb8c`。`SKILL.md` 为 141 行；兼容长协议 `references/system-prompt.md` 为 1,560 行。N12 增量审计从 `v1.0.0` 基线出发，按主题推进并由版本化 `v1.0.1` tag/Release 收口；tag 未签名、Release 非 immutable 等边界仍按 P2 披露。
 
 ### 1.2 参考项目扫描结果
 
@@ -67,9 +67,10 @@
 2. `acquire-codebase-knowledge`：决定模糊请求先扫描、结论必须有证据。
 3. `systematic-debugging`：决定先复现、最小实验、失败后重新判断。
 4. `testing-skills-with-subagents`：决定对技能自身进行 RED/GREEN 和压力测试。
-5. `subagent-driven-development`：决定 Builder/Critic 分权和原 Critic 复验。
-6. `tt-workflow-audit`：决定父线程管理共享状态和结构化 Agent 输出。
-7. `vc-intent-clarify`：决定只问结果级关键选择并限制澄清轮次。
+5. `writing-skills`：决定 Token 预算、交叉引用替代重复和 frontmatter 可检查约束。
+6. `subagent-driven-development`：决定 Builder/Critic 分权和原 Critic 复验。
+7. `tt-workflow-audit`：决定父线程管理共享状态和结构化 Agent 输出。
+8. `vc-intent-clarify`：决定只问结果级关键选择并限制澄清轮次。
 
 选择依据是业务相似度、架构参考价值、工程成熟度和可迁移性；排序还对主项目已覆盖能力降权，并以边际新增价值、可复跑证据和更少专属依赖作为 tie-break，避免高分但重复的候选挤占真正补缺的参考。
 
@@ -78,7 +79,7 @@
 ### 2.1 当前架构特点
 
 - 141 行轻量入口负责触发、状态机和 reference 路由。
-- 八个 90–114 行左右的专项契约按状态加载。
+- 六个约 90–114 行的专项契约与一个状态 schema 按状态加载；1,560 行的兼容长协议仅在明确需要时按标题检索或完整读取。
 - 1,560 行长协议保留为兼容层，不是默认入口。
 - Python 工具全部使用标准库，安装与 eval 不依赖包管理器。
 - 离线静态证据、真实 Agent harness、known-bad 和跨平台 CI 分层验证。
@@ -125,7 +126,7 @@
 
 ### 2.5 技术债
 
-- 已有 GitHub Release `v1.0.0`；仍缺正式 Python 最低版本声明和机器可读的项目版本元数据。
+- 当前已有 GitHub Release `v1.0.1`，并保留 `v1.0.0` 回滚边界；仍缺正式 Python 最低版本声明和机器可读的项目版本元数据。
 - 缺 eval 单元测试拆分与覆盖率门槛。
 - 多目标安装不是全局事务。
 - 历史 `0cf30f2` 是 31 文件的大批提交，无法证明每一组规则都做了独立消融；这是过程证据债务，不能事后伪造。
@@ -163,11 +164,11 @@
 | 层级 | 基线短板 | 当前改善 | 剩余差距 |
 |---|---|---|---|
 | 功能层 | 模糊请求可能先问用户；测试失败易交回用户 | 自动侦察、失败续修、异步任务专项、结果选项 | 真实 Claude/其他 CLI 行为样本不足 |
-| 架构层 | 每次强制加载长协议；description 承载工作流 | 轻量状态机和八个按需契约 | 长协议与模块契约仍重复；eval 单文件偏大 |
+| 架构层 | 每次强制加载长协议；description 承载工作流 | 轻量状态机、七个按需模块化 reference（六个契约加一个 schema）和一个兼容长协议 | 长协议与模块契约仍重复；eval 单文件偏大 |
 | 工程层 | 无可执行 eval、无真实安装测试、无 CI | baseline、known-bad、forward harness、11 项安装测试、15 项 forward 与 8 项 eval 安全/证据测试、双 OS CI | 缺正式版本元数据、覆盖率和更多真实 Agent 场景 |
 | 性能层 | 默认加载约 20K 字符长协议 | 当前默认上下文代理下降 76.7% | Deep 多 reference 累积成本仍需真实 token/延迟采样 |
 | 安全层 | 桥接过度触发；路径/输出边界未系统测试 | 权限分层、标准/custom/native 路径防逃逸、默认脱敏、完整 artifact 记录校验 | 理论 TOCTOU 和未知 Secret 格式保留为非阻塞边界 |
-| 运维层 | 安装说明和远程验证不足 | README、npx、Python 安装器、Actions、`v1.0.0` Release | 多目标事务、自动化版本元数据和制品签名仍是 P2 |
+| 运维层 | 安装说明和远程验证不足 | README、npx、Python 安装器、Actions、`v1.0.1` Release，并保留 `v1.0.0` 回滚 | 多目标事务、自动化版本元数据和制品签名仍是 P2 |
 
 ## 5. 可迁移 / 半可迁移 / 不建议迁移
 
@@ -200,7 +201,19 @@
 | P2 | 拆分约 1,146 行 eval runner | 降低多职责维护风险 | evals | 更易单测 | 重构回归 | N/A | 保持 CLI |
 | P2 | 多目标安装事务 | 防中途失败残留 | installer | 更强原子性 | 实现复杂 | N/A | 需保持 force 行为 |
 | P2 | Claude/更多 CLI 真实矩阵 | 区分格式兼容和行为兼容 | forward reports | 更强泛化证据 | 需要环境和凭证 | N/A | 不改变技能接口 |
-| P2 | 机器可读版本和发布自动化 | `v1.0.0` 已手工发布，后续仍需降低发布漂移 | 根目录、release workflow | 可重复发布和制品追踪 | 流程成本 | N/A | 新增不破坏 |
+| P2 | 机器可读版本和发布自动化 | `v1.0.1` 已发布，但版本/兼容元数据仍分散在 README、workflow 与发布记录中 | 根目录、release workflow | 可重复发布和制品追踪 | 流程成本 | N/A | 新增不破坏 |
+
+### 6.1 下一阶段方案比较与批准门
+
+当前没有需要紧急修复的 P0；三条路径都能保持 `v1.0.1` 的安装与使用契约，但解决的问题、风险和所需授权不同。
+
+| 方案 | 核心改动 | 预期收益 | 主要风险 | 数据迁移/兼容性 | 结论 |
+|---|---|---|---|---|---|
+| A：仅治理与证据 | 声明支持矩阵、补齐版本元数据、把临时 coverage 诊断变为可复跑门禁 | 提高发布透明度，风险最低 | 不能降低 `run_evals.py` 的维护复杂度，也不会增加真实客户端行为证据 | 无数据迁移；新增文档/配置 | 可作为 B 的前置小批次，不建议单独占用一次大改造 |
+| B：评测器测试先行模块化（推荐） | 先锁定当前 CLI、JSON/Markdown 报告、hash、baseline/candidate/known-bad 的特征；再将 `run_evals.py` 的 artifact、routing、checks、reporting 提取为内部模块，保留 CLI 薄层 | 直接处理 1,146 行多职责维护面，缩小评分、指纹和报告变更的回归半径 | 导入路径、输出顺序或 hash 语义漂移 | 无数据迁移；CLI 参数、退出码、报告 schema 和固定 baseline 必须保持兼容 | 推荐；成本中等、收益可验证、可小步回滚 |
+| C：安装事务 + 真实跨客户端矩阵 | 为多目标安装增加 journal/补偿回滚；为 Codex/Claude 等真实 CLI 增加 adapter 与 forward cases | 强化部分失败恢复与“格式兼容”到“真实行为兼容”的证据 | 文件系统替换语义复杂；真实 CLI 需要明确版本、模型、凭证和费用边界 | 无业务数据迁移；安装失败语义与运行时间可能变化 | 价值高但依赖外部选择，留待 B 后且需用户明确指定客户端矩阵 |
+
+推荐先批准 **B**，并把 A 中的最小支持矩阵说明作为同一批文档收口；C 不与 B 并行，以免把评测重构、文件系统事务和外部客户端行为三个风险面耦合。批准前不改动产品脚本。
 
 ## 7. 实施方案
 
@@ -238,7 +251,7 @@
 
 ### 7.8 部署与运维建议
 
-生产部署 N/A。交付是 GitHub 发布和技能安装：远程 SHA、Actions、`npx skills --list`、Python 安装测试和公开 Release 构成发布证据。`v1.0.0` 已发布；P2 是机器可读版本、自动 release notes 和制品签名，而不是“尚未创建 Release”。
+生产部署 N/A。交付是 GitHub 发布和技能安装：远程 SHA、Actions、`npx skills --list`、Python 安装测试和公开 Release 构成发布证据。当前稳定版 `v1.0.1` 已发布，`v1.0.0` 保留为回滚边界；P2 是机器可读版本、自动 release notes、签名和更强发布治理，而不是“尚未创建 Release”。
 
 ## 8. 如果允许改代码：文件计划与实施约束
 
@@ -256,7 +269,21 @@
 | `run_evals.py`、报告 | 排除默认不可达 legacy 代打 | 评分语义 | 报告新增证据字段 | self/candidate/known-bad | 回退评分批次 |
 | CI、README、workflow | 接入测试和证据入口 | 文档/流水线 | 安装命令不变 | YAML、Actions、远程核对 | 回退该批 |
 
-该批次未修改技能名、用户数据或公共 API，也未进行生产/付费操作。历史大批提交无法事后伪造成小步消融；已完成的关闭证据见 2.3.1 和 `reviews/final-critic.md`。N12 增量只修正扫描口径、当前事实、eval 回归和审查状态，仍须经新鲜验证、独立复验和分主题发布后才能再次标记完成。
+该批次未修改技能名、用户数据或公共 API，也未进行生产/付费操作。历史大批提交无法事后伪造成小步消融；已完成的关闭证据见 2.3.1 和 `reviews/final-critic.md`。N12 已完成新鲜验证、独立复验、分主题发布和 `v1.0.1` 收口。当前 N13+ 只进行事实复核与下一阶段设计探索；未经本轮用户确认，不进入新的产品代码改造。
+
+### 8.1 若批准方案 B：首批文件清单与验收
+
+| 文件 | 修改目的与范围 | 兼容性影响 | 验证方式 | 回滚方式 |
+|---|---|---|---|---|
+| `evals/production-delivery-orchestrator/run_evals.py` | 保留参数解析、退出码和编排；从单文件移出纯 artifact/routing/check/report 函数 | CLI、JSON/Markdown schema、hash、分数和路径脱敏必须字节/语义兼容 | self-test、current/baseline、known-bad、现有 23 测试与 golden 特征比对 | 恢复此文件并删除本批内部模块 |
+| `evals/production-delivery-orchestrator/eval_core/__init__.py`（新增） | 内部模块命名空间，不暴露新的公共 Python API | 无外部 API；仅供同目录 CLI 与测试导入 | Python 3.11 语法、导入测试 | 删除目录 |
+| `evals/production-delivery-orchestrator/eval_core/artifact.py`（新增） | `Artifact`、路径显示、frontmatter、Git/文件 artifact 与 canonical hash | hash domain 与路径展示规则不得变化 | 当前/known-bad 报告 fingerprint、Windows/POSIX 现有测试 | 删除文件并还原原函数 |
+| `evals/production-delivery-orchestrator/eval_core/routing.py`（新增） | capability reference 选择、触发代理、默认上下文计算 | default-context 指标和 legacy exclusion 不得变化 | legacy/candidate route 回归 | 删除文件并还原原函数 |
+| `evals/production-delivery-orchestrator/eval_core/checks.py`、`reporting.py`（新增） | fixture 分析、检查执行、静态 case mapping、报告渲染 | 检查顺序、失败 ID、报告字段和 Markdown 可读性保持 | self-test、known-bad、JSON/Markdown schema 与敏感路径测试 | 删除文件并还原原函数 |
+| `evals/production-delivery-orchestrator/tests/test_run_evals.py`（修改）及新增定向测试 | 将现有行为测试固定在模块边界；补充 CLI 与报告不变量 | 仅测试增量 | 23+ 测试、临时 branch coverage、CI Ubuntu/Windows | 回退测试与模块同一批次 |
+| `docs/codebase/TESTING.md`、`workflow_status.md`（修改） | 记录准确验证命令、兼容契约、结果与回滚点 | 无运行影响 | 链接/命令/`git diff --check` | 回退文档增量 |
+
+批次边界：不引入第三方运行依赖，不修改 `SKILL.md`、安装器、CI matrix、发布 tag 或版本化历史报告；若任何 fingerprint、报告字段、exit code 或 known-bad 拒绝行为变化，即停止并回退该批次。
 
 ## 9. 需要补充的信息
 
@@ -267,7 +294,7 @@
 ### 可选信息
 
 - 若要证明 Claude Code 的真实行为兼容，需要用户指定可用版本、模型和是否允许启动真实 CLI forward-test。
-- `v1.0.0` 已发布；若要自动化后续版本，需要用户决定 SemVer 升级策略、制品签名和 release automation 边界。
+- 当前稳定版 `v1.0.1` 已发布并保留 `v1.0.0` 回滚；若要自动化后续版本，需要用户决定 SemVer 升级策略、制品签名和 release automation 边界。
 - 若要使用真实付费 Agent/API 做大规模 eval，需要明确费用上限和凭证边界。
 
 在这些信息缺失时，当前结论严格限定为：Agent Skills 格式、目录安装和项目桥接兼容已验证；真实模型行为证据以 Codex 新上下文 fixture 为主，不外推为所有客户端 100% 一致。
