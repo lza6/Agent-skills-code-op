@@ -1,5 +1,12 @@
 # Workflow Status
 
+## 当前协作能力发布契约（2026-07-17，目标 v1.3.0）
+
+- 目标：将“父线程单写共享状态、只并行只读或不重叠文件范围、冲突串行”做成可跨 CLI 迁移的按需协作契约，并以可复现 Release 发布。
+- 当前授权：用户已授权本仓库修改、分主题 commit/push、tag 和 GitHub Release；所有已发布 tag 保持不动。
+- MUST：协作 contract 只在多 Agent/并行/合并任务加载；Quick 不被升级；削弱 contract 会触发离线门禁；`v1.3.0` tag、metadata、README、Release、checksum、provenance 与 attestation 一致。
+- 当前状态：准备 tag；`v1.3.0` 尚未创建 Release。`v1.2.1` 仍可直接回滚。
+
 ## 当前发布补丁契约（2026-07-17，目标 v1.2.1）
 
 - 目标：让 `main` 中已完成的 provenance 声明核验与 tag-commit 强绑定拥有对应的可复现 Release，而不是只停留在主分支。
