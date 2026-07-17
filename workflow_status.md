@@ -5,7 +5,7 @@
 - 目标：将“父线程单写共享状态、只并行只读或不重叠文件范围、冲突串行”做成可跨 CLI 迁移的按需协作契约，并以可复现 Release 发布。
 - 当前授权：用户已授权本仓库修改、分主题 commit/push、tag 和 GitHub Release；所有已发布 tag 保持不动。
 - MUST：协作 contract 只在多 Agent/并行/合并任务加载；Quick 不被升级；削弱 contract 会触发离线门禁；`v1.3.0` tag、metadata、README、Release、checksum、provenance 与 attestation 一致。
-- 当前状态：准备 tag；`v1.3.0` 尚未创建 Release。`v1.2.1` 仍可直接回滚。
+- 当前状态：已完成。`v1.3.0` annotated tag 指向 `dba7be6`；双平台门禁 [29593421927](https://github.com/lza6/Agent-skills-code-op/actions/runs/29593421927) 和发布工作流 [29593507945](https://github.com/lza6/Agent-skills-code-op/actions/runs/29593507945) 均成功；下载附件后的 `--expected-commit` 复验、`gh attestation verify` 和 tagged `npx.cmd ... --list` 均通过。`v1.2.1` 仍可直接回滚。
 
 ## 当前发布补丁契约（2026-07-17，目标 v1.2.1）
 
