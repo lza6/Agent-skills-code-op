@@ -5,7 +5,7 @@
 - 目标：让 `main` 中已完成的 provenance 声明核验与 tag-commit 强绑定拥有对应的可复现 Release，而不是只停留在主分支。
 - 当前授权：用户已授权按主题 commit/push 和创建 Release；保留 `v1.0.0`、`v1.0.1`、`v1.1.0` 和 `v1.2.0` 作为历史/回滚 tag，绝不移动它们。
 - MUST：`v1.2.1` metadata、README、Release 说明、构建器和 tag 一致；ZIP 继续获得 GitHub Artifact Attestation；远端双平台 CI、Release workflow、下载复验和 attestation 验证均成功。
-- 当前状态：准备 tag；`v1.2.1` 尚未创建 Release。`v1.2.0` 的线上 Release 已保留且正文已勘误为带 `--targets all --bridges all` 的可执行恢复命令。
+- 当前状态：已完成。`v1.2.1` annotated tag 指向 `45fe743`；双平台门禁 [29592137411](https://github.com/lza6/Agent-skills-code-op/actions/runs/29592137411) 和发布工作流 [29592221435](https://github.com/lza6/Agent-skills-code-op/actions/runs/29592221435) 均成功；下载附件后的 `--expected-commit` 离线复验、`gh attestation verify` 和 tagged `npx.cmd ... --list` 均通过。`v1.2.0` 的线上 Release 已保留且正文已勘误为带 `--targets all --bridges all` 的可执行恢复命令。
 
 ## 当前运维加固任务契约（2026-07-17，目标 v1.2.0）
 
