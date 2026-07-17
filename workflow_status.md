@@ -1,5 +1,12 @@
 # Workflow Status
 
+## 当前发布说明修正契约（2026-07-18，目标 v1.4.1）
+
+- 目标：更正 `v1.4.0` 发布说明中“技能安装/扫描器测试”的错误计数（23 → 25）；不改变技能代码，不移动 `v1.4.0` tag，并以新 Release 保留可验证的来源证明。
+- 当前授权：用户已授权按主题 commit/push、创建 annotated tag 和 GitHub Release；所有已发布 tag 保持不动。
+- MUST：README、metadata、Release、provenance、checksum 与 attestation 绑定 `v1.4.1`；新说明明确 `v1.4.0` 仍可回滚且其技能内容未修改；远程验证完成前不宣称 Release 已发布。
+- 当前状态：文档修正和本地验证完成，待独立主题提交、tag、远程 CI、Release 和附件核验。
+
 ## 当前自适应交付能力发布契约（2026-07-17，目标 v1.4.0）
 
 - 目标：将可选代码库盘点、Deep/高风险 Standard 的两阶段规格/质量审查、核心逻辑测试先行与遗留等价证据、定性歧义路由做成跨 CLI 的按需能力；扫描器绝不成为硬依赖。
