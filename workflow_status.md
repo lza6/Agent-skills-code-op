@@ -65,7 +65,7 @@
 | N15 | 用户授权分主题提交与发布 | passed | N14 | 当前工作树、远程 main、Release 目标 | 用户明确要求分主题 commit/push，并创建中文 Release | 当前用户指令、Git/远程状态 | 已授权；`v1.1.0` 发布批开始 | N/A；不重写历史 |
 | N16 | 按主题实现跨 CLI matrix 与桥接加固 | passed | N15 | installer、eval/forward、profiles、CI、README | 模糊任务先侦察、失败续修、跨 CLI matrix 与安全执行边界可验证 | 安装器 11/11、eval/forward 35/35、self-test、diff check | 桥接、评测和 CI 已分批提交 | 按独立 commit 回退 |
 | N17 | 独立代码 Critic、修复与复验 | passed | N16 | 当前 diff、评测器、profile、报告边界 | P0/P1 为零；宿主环境、目录写入、平台命令、版本匹配和 HOME/TMP 污染均关闭 | 两轮只读 Critic、35/35、diff check | `reviews/v1.1.0-code-review.md`：Approve | 回退未通过批次 |
-| N18 | v1.1.0 tag、CI、制品与 GitHub Release | in_progress | N17 | main、annotated tag、Release assets | tag 指向发布提交；CI、ZIP、checksum、provenance 与中文说明一致 | tag CI、下载核验、`gh release view` | 待外部发布步骤 | 删除 Draft 或创建后续修复版本；不移动已发布 tag |
+| N18 | v1.1.0 tag、CI、制品与 GitHub Release | passed | N17 | main、annotated tag、Release assets | tag 指向发布提交；CI、ZIP、checksum、provenance 与中文说明一致 | tag CI、下载核验、`gh release view`、tagged `npx skills --list` | `v1.1.0` → `8666555`；Actions `29586872151` 双 OS success；3 个附件已核验 | 创建后续修复版本；不移动已发布 tag |
 
 ## 风险与决策
 
@@ -158,10 +158,10 @@
 
 ## 当前结论
 
-- 当前阶段：v1.1.0 发布批；N15–N17 已完成，N18 正在执行。
+- 当前阶段：v1.1.0 发布批完成；N15–N18 均已通过。
 - 历史已完成：N1–N14 和 `v1.0.1` Release 继续绑定各自 tag/commit；本轮不重写其历史结论。
-- 当前主节点：N18（`in_progress`）。
-- 下一步：完成 tag CI、版本化资产、GitHub Release 和下载核验。
+- 当前主节点：N18（`passed`）。
+- 下一步：按需在专用环境采集真实客户端行为样本，或进入已披露的 P2 治理工作。
 - 当前代码改动：桥接规则、跨 CLI matrix、forward harness、CI、README、N13 审计及发布文档均已按主题提交。
 - 未验证项：Claude Code、Cursor、Gemini CLI 等新的真实模型行为样本仍未执行；当前证据为本机 CLI probe、离线/合成测试和历史 v1.0.1 记录。
 - 剩余边界：格式/安装兼容不等于所有客户端行为一致；静态 eval 100 分不等于 19 个 prompt 的真实 Agent 执行；选择非隔离宿主执行真实样本仍需要专用测试环境。
