@@ -6,7 +6,7 @@
 
 | Severity | Concern | Evidence | Impact | Suggested action |
 |----------|---------|----------|--------|------------------|
-| medium | 真实 Agent 行为覆盖有限，多数 19-case 仅为静态 `COVERED/UNCOVERED` 代理 | `cases.yaml`; `run_evals.py:738`; `README.md` | 不能把离线 100 分外推为所有模型/客户端真实遵守 | P1/P2 视目标增加可复跑跨客户端 forward matrix |
+| medium | 真实 Agent 行为覆盖有限，多数 19-case 仅为静态 `COVERED/UNCOVERED` 代理 | `cases.yaml`; `run_evals.py:738`; `run_client_matrix.py`; `README.md` | 不能把离线 100 分外推为所有模型/客户端真实遵守 | matrix 已就绪；在专用环境中按客户端、版本和模型采集真实样本 |
 | medium | `run_evals.py` 1,146 行且承担多职责 | `run_evals.py` function inventory and line count | 修改评分、hash 或报告时回归半径大 | 保持 CLI，拆成 artifact/routing/checks/report/fixture 模块 |
 | medium | 多目标安装不提供跨目标全局事务 | `install_skill.py:278-318` | 后续目标在预检后发生 I/O 错误时，前面目标可能已经安装 | 设计 transaction plan、per-target journal 和补偿回滚 |
 | low/medium | 兼容长协议与模块化契约存在重复维护面 | `SKILL.md`; `references/system-prompt.md` | 规则可能漂移或旧协议重新引入刚性行为 | 增加一致性/反向回归，长期缩小兼容层 |
@@ -54,7 +54,7 @@
 ### 6) `[ASK USER]` Questions
 
 1. [ASK USER] 下一实施阶段要以“保持 `v1.0.1` 稳定，仅补文档/治理”为主，还是授权进入 P2 代码重构（优先拆分 eval runner 与安装事务）？
-2. [ASK USER] 若要把“格式兼容”提升为“真实行为兼容”，需要验证哪些客户端、版本和模型，是否允许启动这些本地 CLI？
+2. [ASK USER] 若要把“格式兼容”提升为“真实行为兼容”，需要验证哪些客户端、版本和模型，是否允许在专用 VM/容器或测试账号中启动这些本地 CLI？
 3. [ASK USER] 期望声明的 Python 支持下限、SemVer 发布策略和是否要求签名/immutable release 是什么？
 
 ### 7) Intent vs. Reality

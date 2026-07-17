@@ -8,7 +8,7 @@
 |--------|---------------------------|---------|------------|-------------|----------|
 | Local filesystem | File system | 安装技能、更新桥接、创建临时 fixture、写报告 | 当前 OS 用户权限 | high | `install_skill.py`; `run_forward_tests.py` |
 | Git CLI/repository | Process/VCS | 读取固定 baseline、初始化 fixture、检查 status/diff/commit | 本地仓库权限；不需要远程凭证 | high | `run_evals.py`; `run_forward_tests.py` |
-| Agent/CLI command | External process | 可选执行真实 forward-test | 由用户提供的命令/客户端自行处理凭证 | medium/high | `run_forward_tests.py --agent-command` |
+| Agent/CLI command | External process | probe-only matrix 或可选真实 forward-test | 默认最小环境；真实执行需显式环境文件和 `--allow-unsafe-host-execution` | medium/high | `run_client_matrix.py`; `run_forward_tests.py --agent-command` |
 | GitHub Actions | CI | Ubuntu/Windows 重复验证 | GitHub 仓库权限；workflow 仅 `contents: read` | high | `.github/workflows/skill-evals.yml` |
 | `npx skills` / Agent Skills clients | Distribution/consumer tooling | 安装、发现和使用技能 | 由消费者环境决定 | medium | `README.md` |
 

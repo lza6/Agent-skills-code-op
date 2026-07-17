@@ -1,21 +1,20 @@
 # Workflow Status
 
-## 当前复核任务契约（2026-07-17，N13+）
+## 当前发布任务契约（2026-07-17，v1.1.0）
 
-- 目标：基于当前主仓库和 `C:\Users\Administrator.DESKTOP-EGNE9ND\.claude\skills` 的新鲜事实，重新完成项目识别、参考筛选、差距分析、跨技术栈迁移分级和 P0/P1/P2 设计；经独立只读 Critic 复验后提交用户批准，再决定是否实施新的代码改造。
+- 目标：将已完成的桥接规则、跨 CLI forward-test matrix、N13 审计文档和验证证据按主题提交并推送到 `main`，创建可核验的 `v1.1.0` tag 与 GitHub Release。
 - 复杂度：Deep。
-- 当前授权：允许只读扫描、非破坏性验证、生成/更新分析文档与本状态文件；根据用户明确的“确认后再实施”门禁，当前不修改产品逻辑、安装器、评测器、CI 或发布资产。
+- 当前授权：用户明确授权本地改动审计、分主题 commit、推送、tag、Release、版本化 ZIP、checksum 与 provenance；不运行真实模型 CLI，不部署产品服务。
 - MUST 验收标准：
-  - 主项目的类型、入口、模块、流程、配置、测试、部署和不适用项均有文件或运行证据；
-  - 参考根区分 `rg` 可发现数、顶层入口、reparse/junction、聚合技能和字面递归数，不混用统计口径；
-  - 高价值候选按业务相似度、架构价值、成熟度、可迁移性和边际增量排序；
-  - 形成可迁移/半可迁移/不建议迁移、P0/P1/P2 路线图、兼容/回滚/验证和未知项；
-  - 当前分析产物由独立只读 Critic 从六个维度审查，P0/P1 清零后才提交用户批准；
-  - 用户批准实施方向后，才新增实现批次和代码级 Critic 修复/复验循环。
-- 已确认事实：仓库是单技能 Agent Skills 分发、安装与评测项目；历史 N1–N12 和 `v1.0.1` 发布闭环保留为旧版本证据，不自动批准本轮新增变化。
-- 当前用户可见结果：本轮先得到证据化 1–9 分析、方案比较和明确批准门；没有批准前不会出现业务代码差异。
-- 停止条件：分析 Critic 通过后等待用户选择设计方向；或发现需要用户决定且会改变兼容性、发布范围、客户端矩阵或实施成本的阻塞项。
-- 历史说明：下方原“任务契约”及 N1–N12 记录属于上一轮已发布闭环；本节和 N13+ 是当前有效任务状态。
+  - commit 以桥接规则、评测实现、审计文档、发布说明拆分，且每批推送后远程 `main` 可见；
+  - 本地结构、安装器、eval/forward、known-bad、synthetic forward 与 whitespace 门禁具备新鲜证据；
+  - 新 Release 的 tag、目标提交、ZIP、checksum、provenance 和中文说明相互一致；
+  - 不把 probe、synthetic 或历史 `v1.0.1` 记录描述成新的真实模型行为样本；
+  - 独立代码审查 P0/P1 为零，且未把用户原有无关改动遗漏或混入错误主题。
+- 已确认事实：仓库是单技能 Agent Skills 分发、安装与评测项目；`v1.0.1` 是回滚边界，`v1.1.0` 是本轮目标版本。
+- 当前用户可见结果：团队可按四个语义清晰的 commit 审查本轮变化，并通过 Release 附件验证版本化技能包。
+- 停止条件：tag CI、发布制品和 Release 核验完成；如果 GitHub 权限、远程状态或 CI 失败阻塞，保留已推送提交并如实报告。
+- 历史说明：下方原“任务契约”及 N1–N14 是相应时间点的历史证据；本节是当前有效发布状态。
 
 ## 任务契约
 
@@ -63,9 +62,10 @@
 | N12 | 增量参考库口径、eval 回归与状态证据收口 | passed | N11 | `docs/`、技能入口、eval/forward、CI、GitHub | 多口径不混用；跨平台指纹稳定；安装器路径可执行；原 Critic 复验；v1.0.1 可复现发布 | 数字/链接、23+11 单测、真实 Forward、`git diff --check`、双 OS CI、Release/tagged npx | A1-A9 Closed；三名原 Critic 最终无 P0/P1 | 回退 N12 主题提交；不移动 `v1.0.1` tag |
 | N13 | 当前工作树与参考根新鲜复核、代码库事实文档 | passed | N12 | `docs/codebase/`、既有分析报告、当前仓库、参考根 | 七份事实文档完整；主项目测试重跑；参考根统计独立复算 | scan、11+23 测试、eval/forward、结构计数、子 Agent 回传 | 本地验证、参考审计、主项目审计与文档修正完成 | 删除本轮文档增量，不改产品代码 |
 | N14 | 当前分析产物独立六维 Critic 与修复复验 | passed | N13 | `docs/codebase/`、分析报告、workflow | 需求/逻辑/边界/质量/覆盖/运行六维；P0/P1 为零 | 独立只读 Agent；主线程修正文档；原 Critic 复验 | `/root/n13_fast_critic` Verdict `Approve`，术语/快照细化后原 Critic `Reverify: Approve` | 仅回退未通过的分析文档改动 |
-| N15 | 用户批准架构与实施方向 | pending | N14 | 路线图与方案选项 | 用户明确批准一个方向或要求修订 | 用户确认 | 待执行 | N/A；未批准不实施 |
-| N16 | 按批准方向分批实施 | pending | N15 | 由批准方案决定 | 每批有文件清单、兼容、验证和回滚；不做无关重构 | 定向测试、接缝验证、必要 CI/行为验证 | 待批准 | 按批次回退 |
-| N17 | 实施后独立代码 Critic、修复与原 Critic 复验 | pending | N16 | 当前 diff 与新鲜运行证据 | 六维通过；P0/P1 清零 | 独立只读 Critic → 主线程修复 → 原 Critic 复验 | 待实施 | 回退未通过批次 |
+| N15 | 用户授权分主题提交与发布 | passed | N14 | 当前工作树、远程 main、Release 目标 | 用户明确要求分主题 commit/push，并创建中文 Release | 当前用户指令、Git/远程状态 | 已授权；`v1.1.0` 发布批开始 | N/A；不重写历史 |
+| N16 | 按主题实现跨 CLI matrix 与桥接加固 | passed | N15 | installer、eval/forward、profiles、CI、README | 模糊任务先侦察、失败续修、跨 CLI matrix 与安全执行边界可验证 | 安装器 11/11、eval/forward 35/35、self-test、diff check | 桥接、评测和 CI 已分批提交 | 按独立 commit 回退 |
+| N17 | 独立代码 Critic、修复与复验 | passed | N16 | 当前 diff、评测器、profile、报告边界 | P0/P1 为零；宿主环境、目录写入、平台命令、版本匹配和 HOME/TMP 污染均关闭 | 两轮只读 Critic、35/35、diff check | `reviews/v1.1.0-code-review.md`：Approve | 回退未通过批次 |
+| N18 | v1.1.0 tag、CI、制品与 GitHub Release | in_progress | N17 | main、annotated tag、Release assets | tag 指向发布提交；CI、ZIP、checksum、provenance 与中文说明一致 | tag CI、下载核验、`gh release view` | 待外部发布步骤 | 删除 Draft 或创建后续修复版本；不移动已发布 tag |
 
 ## 风险与决策
 
@@ -158,10 +158,10 @@
 
 ## 当前结论
 
-- 当前阶段：本轮重新审计与设计探索已通过独立审查，未进入新增代码实施。
-- 历史已完成：N1–N12，包括安全加固、五轮真实 Forward、三名原 Critic 最终签收、双 OS CI 和 `v1.0.1` Release；这些证据继续有效于对应 tag/commit。
-- 当前主节点：N15（`pending`）。
-- 下一步：等待用户批准方案 A、B 或 C；推荐 B（评测器测试先行模块化），获批后才进入 N16。
-- 当前代码改动：无产品逻辑改动；新增 `docs/codebase/` 事实文档，并修正项目对标报告、参考扫描报告和本状态文件。
-- 未验证项：Claude Code、Cursor、Gemini CLI 等真实模型行为仍未执行；当前只复验本地 Python/CI 等价门和既有 forward 记录新鲜度。
-- 剩余边界：格式/安装兼容不等于所有客户端行为一致；静态 eval 100 分不等于 19 个 prompt 的真实 Agent 执行；P2 代码重构需用户明确批准。
+- 当前阶段：v1.1.0 发布批；N15–N17 已完成，N18 正在执行。
+- 历史已完成：N1–N14 和 `v1.0.1` Release 继续绑定各自 tag/commit；本轮不重写其历史结论。
+- 当前主节点：N18（`in_progress`）。
+- 下一步：完成 tag CI、版本化资产、GitHub Release 和下载核验。
+- 当前代码改动：桥接规则、跨 CLI matrix、forward harness、CI、README、N13 审计及发布文档均已按主题提交。
+- 未验证项：Claude Code、Cursor、Gemini CLI 等新的真实模型行为样本仍未执行；当前证据为本机 CLI probe、离线/合成测试和历史 v1.0.1 记录。
+- 剩余边界：格式/安装兼容不等于所有客户端行为一致；静态 eval 100 分不等于 19 个 prompt 的真实 Agent 执行；选择非隔离宿主执行真实样本仍需要专用测试环境。

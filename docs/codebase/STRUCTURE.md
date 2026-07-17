@@ -7,7 +7,7 @@
 | Path | Purpose | Evidence |
 |------|---------|----------|
 | `skills/production-delivery-orchestrator/` | 可安装技能产品：入口、客户端元数据、按需契约、兼容协议、安装器与安装测试 | `SKILL.md`; `agents/openai.yaml`; `references/`; `scripts/`; `tests/` |
-| `evals/production-delivery-orchestrator/` | 离线评测、真实/合成 forward harness、fixture、测试、baseline 和报告 | `run_evals.py`; `run_forward_tests.py`; `cases.yaml`; `rubric.yaml` |
+| `evals/production-delivery-orchestrator/` | 离线评测、真实/合成 forward harness、跨 CLI matrix、fixture、测试、baseline 和报告 | `run_evals.py`; `run_forward_tests.py`; `run_client_matrix.py`; `cases.yaml`; `rubric.yaml` |
 | `.github/workflows/` | 双系统 CI 门禁 | `.github/workflows/skill-evals.yml` |
 | `docs/` | 项目识别、参考扫描和本次代码库事实文档 | `docs/project-benchmark-analysis.md`; `docs/reference-scan-report.md`; `docs/codebase/` |
 | `reviews/` | 独立 Critic 六维审查和复验记录 | `reviews/final-critic.md` |

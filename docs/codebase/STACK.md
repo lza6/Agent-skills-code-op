@@ -29,7 +29,7 @@
 |------|---------|----------|
 | Python `unittest` | 安装器、forward harness、报告可移植性和安全回归 | `skills/production-delivery-orchestrator/tests/`; `evals/production-delivery-orchestrator/tests/` |
 | Custom offline eval runner | baseline/candidate、触发代理、能力路由、known-bad 和 fixture 检查 | `evals/production-delivery-orchestrator/run_evals.py`; `rubric.yaml` |
-| Custom forward-test harness | synthetic 自测、可选真实 Agent CLI、记录校验和脱敏 | `evals/production-delivery-orchestrator/run_forward_tests.py` |
+| Custom forward-test harness | synthetic 自测、可选真实 Agent CLI、跨 CLI profile/matrix、记录校验和脱敏 | `evals/production-delivery-orchestrator/run_forward_tests.py`; `run_client_matrix.py` |
 | GitHub Actions | Windows/Ubuntu、Python 3.11 CI | `.github/workflows/skill-evals.yml` |
 | Git | baseline、diff、状态和发布证据 | `run_evals.py`; `run_forward_tests.py`; `workflow_status.md` |
 
