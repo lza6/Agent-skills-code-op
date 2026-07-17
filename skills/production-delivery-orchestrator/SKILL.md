@@ -130,12 +130,12 @@ Quick 任务不要创建 `workflow_status.md`。Deep、长时间 Standard 或用
 
 本技能使用通用 Agent Skills 目录结构，不依赖某个 CLI 的专属工具名。原生支持技能发现的工具可自动或显式调用；只支持项目规则的工具可使用 `scripts/install_skill.py` 生成轻量桥接。桥接只负责路由到本技能，不复制完整工作流，也不强制所有软件请求加载长协议。
 
-常用命令：
+执行安装器前，先解析当前 `SKILL.md` 所在目录并记为 `<skill-dir>`；不要假设智能体当前工作目录就是技能目录。常用命令：
 
 ```bash
-python scripts/install_skill.py --scope user --targets all
-python scripts/install_skill.py --scope project --project-dir /path/to/repo --targets all --bridges all
-python scripts/install_skill.py --scope project --project-dir /path/to/repo --custom-bridge .tool/rules.md
+python "<skill-dir>/scripts/install_skill.py" --scope user --targets all
+python "<skill-dir>/scripts/install_skill.py" --scope project --project-dir /path/to/repo --targets all --bridges all
+python "<skill-dir>/scripts/install_skill.py" --scope project --project-dir /path/to/repo --custom-bridge .tool/rules.md
 ```
 
 除非用户明确授权 `--force`，不要覆盖现有安装。系统级安装、远程推送和发布仍按外部操作边界处理。

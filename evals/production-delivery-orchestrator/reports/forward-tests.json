@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-07-17T05:38:04.1469649+08:00",
+  "generated_at": "2026-07-17T10:20:39.1892579+08:00",
   "execution_mode": "codex_collaboration_subagents",
   "client": "Codex desktop collaboration subagents",
   "model": "unknown - not exposed by the collaboration runtime",
@@ -8,8 +8,8 @@
   "status": "PASS",
   "candidate": {
     "skill_path": "skills/production-delivery-orchestrator",
-    "skill_sha256_at_execution": "02c952410f03be6d1df86cf406d3cf1d5fbd115906cf6565651b5184a8718458",
-    "current_skill_sha256_when_recorded": "02c952410f03be6d1df86cf406d3cf1d5fbd115906cf6565651b5184a8718458"
+    "skill_sha256_at_execution": "7291cc43c07401dd833fa30601254c3c3dafed85eb7c501f4ced93216d03b29d",
+    "current_skill_sha256_when_recorded": "7291cc43c07401dd833fa30601254c3c3dafed85eb7c501f4ced93216d03b29d"
   },
   "trace_limits": [
     "Subagent final outputs and main-thread verification are preserved below.",
@@ -20,9 +20,9 @@
   "cases": [
     {
       "id": "novice-vague-video-task",
-      "agent_task": "/root/forward_canonical_vague_fix",
+      "agent_task": "/root/forward_vague_v101",
       "prompt": "帮我修复视频任务问题。",
-      "fixture_baseline_commit": "05947fbd60c06667a5038b89bfa0641cd5ce0a13",
+      "fixture_baseline_commit": "c275ff85d16f6b3a5556d174f43476bfd1234e8c",
       "status": "PASS",
       "must_results": {
         "scanned_before_asking": true,
@@ -42,13 +42,13 @@
         "git_diff_check_exit_code": 0,
         "changed_files": ["frontend/useVideoJob.ts"]
       },
-      "raw_final": "已修复视频任务失败后持续轮询的问题。根因是前端只把 completed 视为终态；frontend/useVideoJob.ts 将终态集合改为 completed、failed。修复前 python tests/test_polling_contract.py -v 失败，修复后 unittest discover 通过 1/1；queued、processing 继续轮询，completed、failed 停止轮询；git diff --check 通过；最终只修改该文件一行。仓库没有前端依赖清单或构建入口，因此未执行 TypeScript 构建。未提交、推送、部署、全局安装或调用外部服务。"
+      "raw_final": "已修复视频失败任务持续轮询的问题。根因是后端将 failed 定义为终态，但前端只把 completed 视为终态。frontend/useVideoJob.ts 将终态集合改为 completed、failed；修复前 unittest discover 失败，修复后同一命令两次均通过 1/1；git diff --check 通过；最终只修改该文件一行。fixture 没有 package.json、TypeScript 构建配置或浏览器测试环境，因此未执行前端编译及真实浏览器/API 集成测试。未推送、未部署，也未修改技能仓库。"
     },
     {
       "id": "analysis-only",
-      "agent_task": "/root/forward_canonical_analysis_only",
+      "agent_task": "/root/forward_analysis_v101",
       "prompt": "审查视频任务为什么会无限轮询，先不要修改代码。",
-      "fixture_baseline_commit": "05947fbd60c06667a5038b89bfa0641cd5ce0a13",
+      "fixture_baseline_commit": "c275ff85d16f6b3a5556d174f43476bfd1234e8c",
       "status": "PASS",
       "must_results": {
         "scanned_repository_and_state_flow": true,
@@ -67,7 +67,7 @@
         "unstaged_diff_exit_code": 0,
         "staged_diff_exit_code": 0
       },
-      "raw_final": "无限轮询由前后端终态定义不一致导致：后端失败后返回 failed 且将其视为终态，前端 TERMINAL_STATES 只有 completed，因此 shouldPollVideoJob('failed') 为 true。VideoResult 已支持失败提示，仓库没有最大轮询次数、截止时间、取消或 timed_out 兜底。只读验证得到 backend_marks_failed_terminal=True、frontend_marks_failed_terminal=False、shouldPoll(failed)=True；现有契约测试按预期 RED。fixture 不含实际定时调度循环，因此未测量真实请求次数。未修改文件，最终 git status/diff 干净。"
+      "raw_final": "无限轮询由前后端终态定义不一致导致：后端返回 failed 并将其视为终态，前端 TERMINAL_STATES 只有 completed，因此 shouldPollVideoJob('failed') 为 true。VideoResult 已支持失败提示；仓库没有其他停止条件、最大轮询时长或取消机制。只读 unittest 按预期失败，后端检查确认失败任务输出 failed；最终 git status、未暂存 diff 和暂存 diff 均干净。fixture 不含真实轮询调度调用方、前端构建和浏览器环境，因此未测量真实请求次数。"
     }
   ]
 }
