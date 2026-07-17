@@ -99,6 +99,14 @@
       "patterns": ["父线程|主线程", "共享状态", "允许写入", "禁止写入", "不重叠|无重叠", "串行核对"]
     },
     {
+      "id": "adaptive-rigor-routing",
+      "title": "扫描、审查、TDD 与歧义处理按风险启用且保留等价证据",
+      "weight": 9,
+      "critical": true,
+      "kind": "capability",
+      "patterns": ["扫描器.*可选|可选.*扫描", "不.*扫描器.*依赖|不把.*脚本.*当作依赖", "Deep.*高风险 Standard|高风险 Standard.*Deep", "两阶段.*审查|规格审查.*质量审查", "测试先行|测试.*先行", "等价.*复现.*证据|等价证据", "定性.*风险|风险维度", "不.*固定公式|不要.*固定公式"]
+    },
+    {
       "id": "verification-honesty",
       "title": "没有新鲜证据时不得声称完成或通过",
       "weight": 10,
@@ -181,6 +189,10 @@
     "deep-independent-review": ["independent-review-loop", "verification-honesty"],
     "multi-agent-unavailable": ["independent-review-loop", "verification-honesty"],
     "multi-agent-safe-merge": ["collaboration-merge-isolation", "independent-review-loop"],
+    "adaptive-repository-inventory": ["adaptive-rigor-routing", "discovery-before-questions"],
+    "deep-spec-quality-review": ["adaptive-rigor-routing", "independent-review-loop"],
+    "legacy-equivalent-test-evidence": ["adaptive-rigor-routing", "verification-honesty"],
+    "qualitative-ambiguity-routing": ["adaptive-rigor-routing", "permission-boundaries"],
     "dirty-worktree": ["workspace-protection"],
     "non-software-request": ["trigger-boundary"],
     "simple-code-explanation": ["trigger-boundary"],

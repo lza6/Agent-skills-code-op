@@ -34,6 +34,8 @@ jobs:
           python -c "from pathlib import Path;
           compile(Path('skills/production-delivery-orchestrator/scripts/install_skill.py').read_text(encoding='utf-8'),
           'install_skill.py', 'exec');
+          compile(Path('skills/production-delivery-orchestrator/scripts/repository_inventory.py').read_text(encoding='utf-8'),
+          'repository_inventory.py', 'exec');
           compile(Path('evals/production-delivery-orchestrator/run_evals.py').read_text(encoding='utf-8'),
           'run_evals.py', 'exec');
           compile(Path('evals/production-delivery-orchestrator/run_forward_tests.py').read_text(encoding='utf-8'),

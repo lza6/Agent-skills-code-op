@@ -2,6 +2,8 @@
 
 仅在高风险 Standard、Deep、用户明确要求独立审查，或实现涉及重要公共契约、安全、数据、计费和并发时读取本文件。
 
+当 `adaptive-delivery-contract.md` 已为 Deep 或高风险 Standard 启用两阶段审查时，先完成实现前的阶段 A 规格审查，再在当前实现和验证后按本契约执行阶段 B 质量审查。阶段 A 关注 MUST、边界、兼容性、风险和验证映射；阶段 B 不能跳过阶段 A 未关闭的高风险歧义，也不能用 Builder 自评替代复验。
+
 ## 一、Builder 与 Critic 分权
 
 ### Builder

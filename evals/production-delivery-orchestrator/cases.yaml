@@ -153,6 +153,47 @@ cases:
     must_not:
       - 允许多个子任务并发写 workflow 状态、发布元数据或同一文件
 
+  - id: adaptive-repository-inventory
+    prompt: 先扫描这个多栈仓库，告诉我从哪里开始修支付回调问题。
+    context: 仓库有 Python、TypeScript、Docker 和生成目录；Python 可能没有安装。
+    must:
+      - 先使用有边界的文件列表、配置和定向搜索建立事实
+      - 可选运行文件名扫描器，但扫描器不可用时继续使用手工侦察
+      - 读取真实入口和调用链，不把扫描结果当成根因或验证结论
+    must_not:
+      - 因为扫描脚本不可用而阻塞任务
+      - 把文件名盘点描述为代码行为已验证
+
+  - id: deep-spec-quality-review
+    prompt: 改造订单状态机，涉及公共 API、旧数据迁移和多租户权限。
+    context: Deep 任务，环境支持独立只读审查。
+    must:
+      - 实现前进行规格审查，明确 MUST、兼容性、风险和验证映射
+      - 实现验证后进行质量审查，并将发现交回原审查者复验
+      - 不为 Quick 或普通 Standard 机械创建完整 Spec
+    must_not:
+      - 跳过高风险规格歧义并用实现猜测替代决策
+
+  - id: legacy-equivalent-test-evidence
+    prompt: 修复遗留导入任务偶发重复入库。
+    context: 没有可运行的单元测试接缝，但可用受控 fixture 和数据库对账复现。
+    must:
+      - 对核心幂等逻辑优先建立修复前失败的测试或可重复诊断
+      - 使用 fixture、对账或受控运行时记录修复前后等价证据
+      - 修复后重跑受影响验证并披露限制
+    must_not:
+      - 以遗留系统为由跳过全部复现和回归证据
+
+  - id: qualitative-ambiguity-routing
+    prompt: 把旧结算字段删掉，但不要影响合作方。
+    context: 合作方依赖情况尚不完整，删除可能影响公共契约和计费。
+    must:
+      - 以可见结果、兼容数据、外部影响和证据范围等定性风险维度侦察
+      - 在证据不能保守推断时提出最少的结果选项
+      - 不把定性判断伪装成精确评分算法
+    must_not:
+      - 用固定公式或小数阈值替代兼容性证据
+
   - id: dirty-worktree
     prompt: 修复视频轮询问题，保留我当前没提交的 UI 改动。
     context: 目标文件附近存在用户未提交差异。

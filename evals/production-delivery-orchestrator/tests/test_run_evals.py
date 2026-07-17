@@ -228,6 +228,29 @@ class PortableReportPathTest(unittest.TestCase):
                 RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
             )
 
+    def test_adaptive_contract_is_routed_and_detects_missing_rigor_rules(self) -> None:
+        rubric = RUNNER.load_json_yaml(EVAL_DIR / "rubric.yaml")
+        check = next(
+            item
+            for item in rubric["checks"]
+            if item["id"] == "adaptive-rigor-routing"
+        )
+        fixture = RUNNER.analyze_fixture(RUNNER.DEFAULT_FIXTURE)
+        current = RUNNER.load_artifact(RUNNER.DEFAULT_CANDIDATE, "current")
+        self.assertTrue(
+            RUNNER.evaluate_check(current, check, fixture, rubric).passed
+        )
+
+        with tempfile.TemporaryDirectory(prefix="pdo-adaptive-contract-") as temp:
+            candidate = Path(temp) / "candidate"
+            shutil.copytree(RUNNER.DEFAULT_CANDIDATE, candidate)
+            contract = candidate / "references" / "adaptive-delivery-contract.md"
+            contract.write_text("只要求所有任务运行扫描器和完整 TDD。\n", encoding="utf-8")
+            weakened = RUNNER.load_artifact(candidate, "weakened")
+            self.assertFalse(
+                RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
+            )
+
     def test_cli_summary_redacts_external_output_directory(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-cli-summary-") as temp:
             private_output = Path(temp) / "PrivateReportOwner"
