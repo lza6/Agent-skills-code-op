@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "purpose": "跨 CLI 真实 forward-test 的可复现命令配置。真实执行需要显式确认非隔离宿主执行，生产样本应优先在用户提供的 OS/容器沙箱中运行。",
+  "profiles": [
+    {
+      "id": "codex-cli",
+      "client": "Codex CLI",
+      "observed_version": "0.144.5",
+      "executables": { "windows": "codex.cmd", "posix": "codex" },
+      "probe_args": ["--version"],
+      "configuration": "non-interactive; ephemeral; workspace-write CLI sandbox; host execution still requires an explicit opt-in",
+      "agent_args": [
+        "exec",
+        "--ephemeral",
+        "--sandbox",
+        "workspace-write",
+        "--cd",
+        "{workspace}",
+        "先读取 {skill_dir}/SKILL.md 并应用该技能。当前 workspace 是 {workspace}。这里是临时 fixture 中的 forward-test：只修改当前任务范围；运行本地非破坏性测试；不得部署、推送、安装依赖或访问与任务无关的内容。任务：{prompt}"
+      ]
+    },
+    {
+      "id": "claude-code",
+      "client": "Claude Code",
+      "observed_version": "2.1.212",
+      "executables": { "windows": "claude.cmd", "posix": "claude" },
+      "probe_args": ["--version"],
+      "configuration": "print mode; no session persistence; auto permission mode; host execution still requires an explicit opt-in",
+      "agent_args": [
+        "--print",
+        "--no-session-persistence",
+        "--permission-mode",
+        "auto",
+        "先读取 {skill_dir}/SKILL.md 并应用该技能。当前 workspace 是 {workspace}。这里是临时 fixture 中的 forward-test：只修改当前任务范围；运行本地非破坏性测试；不得部署、推送、安装依赖或访问与任务无关的内容。任务：{prompt}"
+      ]
+    },
+    {
+      "id": "gemini-cli",
+      "client": "Gemini CLI",
+      "observed_version": "0.51.0",
+      "executables": { "windows": "gemini.cmd", "posix": "gemini" },
+      "probe_args": ["--version"],
+      "configuration": "headless prompt; auto_edit approval mode; host execution still requires an explicit opt-in",
+      "agent_args": [
+        "--approval-mode",
+        "auto_edit",
+        "--prompt",
+        "先读取 {skill_dir}/SKILL.md 并应用该技能。当前 workspace 是 {workspace}。这里是临时 fixture 中的 forward-test：只修改当前任务范围；运行本地非破坏性测试；不得部署、推送、安装依赖或访问与任务无关的内容。任务：{prompt}"
+      ]
+    }
+  ]
+}

@@ -119,6 +119,85 @@ class ForwardTestHarnessTest(unittest.TestCase):
         for secret in secrets.values():
             self.assertNotIn(secret, persisted)
 
+    def test_redacts_ephemeral_workspace_and_skill_paths_from_reports(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-forward-paths-") as temp:
+            workspace = Path(temp) / "repo"
+            payload = {
+                "agent_command": [
+                    "agent",
+                    "--workspace",
+                    str(workspace),
+                    "read",
+                    str(HARNESS.SKILL_DIR / "SKILL.md"),
+                ],
+                "raw_stdout": f"used {workspace} and {HARNESS.SKILL_DIR}",
+            }
+            redacted = HARNESS.redact_runtime_paths(payload, workspace)
+
+        rendered = json.dumps(redacted, ensure_ascii=False)
+        self.assertNotIn(str(workspace), rendered)
+        self.assertNotIn(str(HARNESS.SKILL_DIR), rendered)
+        self.assertIn("{workspace}", rendered)
+        self.assertIn("{skill_dir}", rendered)
+
+    def test_agent_environment_is_minimal_and_explicit_values_are_redacted(self) -> None:
+        opaque_secret = "opaque-aws-secret-value-not-matched-by-a-regex"
+        with tempfile.TemporaryDirectory(prefix="pdo-agent-env-") as temp:
+            workspace = Path(temp) / "repo"
+            workspace.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "PATH": os.environ.get("PATH", ""),
+                    "OPENAI_API_KEY": "host-openai-secret",
+                    "AWS_SECRET_ACCESS_KEY": opaque_secret,
+                },
+                clear=True,
+            ):
+                environment = HARNESS.isolated_agent_environment(
+                    workspace, {"CUSTOM_AGENT_TOKEN": opaque_secret}
+                )
+
+        self.assertNotIn("OPENAI_API_KEY", environment)
+        self.assertNotIn("AWS_SECRET_ACCESS_KEY", environment)
+        self.assertEqual(environment["CUSTOM_AGENT_TOKEN"], opaque_secret)
+        self.assertNotEqual(environment["HOME"], str(workspace / ".agent-home"))
+        self.assertIn(".agent-home", environment["HOME"])
+        rendered = json.dumps(
+            HARNESS.redact_runtime_paths(
+                {"raw_stdout": f"AWS_SECRET_ACCESS_KEY={opaque_secret}"},
+                secret_values=(opaque_secret,),
+            ),
+            ensure_ascii=False,
+        )
+        self.assertNotIn(opaque_secret, rendered)
+        self.assertIn(HARNESS.REDACTED, rendered)
+
+    def test_explicit_agent_environment_file_cannot_override_controlled_paths(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-agent-env-file-") as temp:
+            env_file = Path(temp) / "agent.env"
+            env_file.write_text("CUSTOM_AGENT_TOKEN=abc\n", encoding="utf-8")
+            self.assertEqual(
+                HARNESS.load_agent_env_file(env_file), {"CUSTOM_AGENT_TOKEN": "abc"}
+            )
+            env_file.write_text("HOME=C:/host\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "受控变量"):
+                HARNESS.load_agent_env_file(env_file)
+
+    def test_real_agent_command_requires_explicit_unsafe_host_opt_in(self) -> None:
+        args = argparse.Namespace(
+            self_test=False,
+            verify_record=None,
+            agent_command=["agent", "{prompt}"],
+            allow_unsafe_host_execution=False,
+            agent_env_file=None,
+        )
+        stderr = io.StringIO()
+        with mock.patch.object(HARNESS, "parse_args", return_value=args):
+            with contextlib.redirect_stderr(stderr):
+                self.assertEqual(HARNESS.main(), 2)
+        self.assertIn("拒绝在未确认的宿主环境", stderr.getvalue())
+
     def test_rejects_missing_or_forged_record_fields(self) -> None:
         original = json.loads(RECORDED_RUN.read_text(encoding="utf-8"))
         artifact_hash = HARNESS.skill_artifact_sha256(HARNESS.SKILL_DIR)
@@ -197,6 +276,20 @@ class ForwardTestHarnessTest(unittest.TestCase):
             (skill_dir / "scripts" / "standalone.pyc").write_bytes(b"bytecode")
 
             self.assertEqual(HARNESS.skill_artifact_sha256(skill_dir), original_hash)
+
+    def test_fixture_stages_an_intact_skill_copy_inside_the_git_baseline(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-staged-skill-") as temp:
+            workspace = Path(temp) / "repo"
+            baseline = HARNESS.init_fixture(workspace)
+            staged_skill = workspace / ".forward-skill"
+            status = HARNESS.run(["git", "status", "--porcelain=v1"], workspace)
+            staged_skill_exists = (staged_skill / "SKILL.md").is_file()
+            staged_skill_hash = HARNESS.skill_artifact_sha256(staged_skill)
+
+        self.assertRegex(baseline, r"^[0-9a-f]{40}$")
+        self.assertTrue(staged_skill_exists)
+        self.assertEqual(staged_skill_hash, HARNESS.skill_artifact_sha256(HARNESS.SKILL_DIR))
+        self.assertEqual(status.stdout, "")
 
     def test_utf8_text_eol_variants_have_the_same_artifact_hash(self) -> None:
         hashes: list[str] = []
@@ -368,8 +461,12 @@ class ForwardTestHarnessTest(unittest.TestCase):
             stderr=f"OPENAI_API_KEY={timeout_secret}",
         )
         with mock.patch.object(HARNESS, "init_fixture", return_value="abcdef0"):
-            with mock.patch.object(HARNESS, "run", side_effect=[before, timeout]):
-                result = HARNESS.evaluate_case(case, ["agent", "--token", timeout_secret])
+            with mock.patch.object(HARNESS, "skill_artifact_sha256", return_value="hash"):
+                with mock.patch.object(HARNESS, "run", return_value=before):
+                    with mock.patch.object(HARNESS, "run_agent", side_effect=timeout):
+                        result = HARNESS.evaluate_case(
+                            case, ["agent", "--token", timeout_secret]
+                        )
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(result["error"]["kind"], "timeout")
         self.assertNotIn(timeout_secret, json.dumps(result, ensure_ascii=False))

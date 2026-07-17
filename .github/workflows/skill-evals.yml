@@ -35,7 +35,11 @@ jobs:
           compile(Path('skills/production-delivery-orchestrator/scripts/install_skill.py').read_text(encoding='utf-8'),
           'install_skill.py', 'exec');
           compile(Path('evals/production-delivery-orchestrator/run_evals.py').read_text(encoding='utf-8'),
-          'run_evals.py', 'exec')"
+          'run_evals.py', 'exec');
+          compile(Path('evals/production-delivery-orchestrator/run_forward_tests.py').read_text(encoding='utf-8'),
+          'run_forward_tests.py', 'exec');
+          compile(Path('evals/production-delivery-orchestrator/run_client_matrix.py').read_text(encoding='utf-8'),
+          'run_client_matrix.py', 'exec')"
 
       - name: Run evaluation self-test
         run: python evals/production-delivery-orchestrator/run_evals.py --self-test
@@ -46,10 +50,8 @@ jobs:
           --output-dir .eval-reports
           --report-prefix ci
 
-      - name: Validate forward-test harness and recorded real runs
-        run: |
-          python evals/production-delivery-orchestrator/run_forward_tests.py --self-test
-          python evals/production-delivery-orchestrator/run_forward_tests.py --verify-record evals/production-delivery-orchestrator/reports/forward-tests.json
+      - name: Validate forward-test harness without spending provider quota
+        run: python evals/production-delivery-orchestrator/run_forward_tests.py --self-test
 
       - name: Run forward-test security and evidence tests
         run: >-

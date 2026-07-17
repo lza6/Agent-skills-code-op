@@ -39,6 +39,14 @@ CASES = (
         "prompt": "审查视频任务为什么会无限轮询，先不要修改代码。",
         "mode": "read_only",
     },
+    {
+        "id": "ambiguous-user-visible-retry",
+        "prompt": (
+            "视频任务上游失败后应该自动重试，还是让用户手动重试？"
+            "先不要修改。请基于仓库现状给出推荐和两到三个用户可见结果选项。"
+        ),
+        "mode": "result_options",
+    },
 )
 
 REDACTED = "[REDACTED]"
@@ -131,6 +139,27 @@ ARTIFACT_UTF8_TEXT_KIND = b"T"
 ARTIFACT_IGNORED_DIRECTORIES = {"__pycache__"}
 ARTIFACT_IGNORED_FILES = {".DS_Store"}
 ARTIFACT_IGNORED_SUFFIXES = {".pyc"}
+SAFE_AGENT_ENV_KEYS = (
+    "PATH",
+    "PATHEXT",
+    "ComSpec",
+    "SystemRoot",
+    "WINDIR",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+)
+ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+RESERVED_AGENT_ENV_KEYS = {
+    *SAFE_AGENT_ENV_KEYS,
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+    "TMP",
+    "TEMP",
+    "PYTHONUTF8",
+}
 
 
 def skill_artifact_files(skill_dir: Path) -> list[Path]:
@@ -262,6 +291,50 @@ def redact_sensitive(value: Any) -> Any:
     return value
 
 
+def redact_runtime_paths(
+    value: Any,
+    workspace: Path | None = None,
+    secret_values: tuple[str, ...] = (),
+) -> Any:
+    """Replace ephemeral and host-local paths before a forward-test report is saved."""
+
+    replacements = {
+        str(SKILL_DIR): "{skill_dir}",
+        SKILL_DIR.as_posix(): "{skill_dir}",
+    }
+    if workspace is not None:
+        runtime_home = workspace.parent / ".agent-home"
+        runtime_temp = workspace.parent / ".agent-temp"
+        replacements.update(
+            {
+                str(workspace): "{workspace}",
+                workspace.as_posix(): "{workspace}",
+                str(runtime_home): "{agent_home}",
+                runtime_home.as_posix(): "{agent_home}",
+                str(runtime_temp): "{agent_temp}",
+                runtime_temp.as_posix(): "{agent_temp}",
+            }
+        )
+    if isinstance(value, str):
+        redacted = redact_text(value)
+        for secret in secret_values:
+            if secret:
+                redacted = redacted.replace(secret, REDACTED)
+        for source, target in replacements.items():
+            redacted = redacted.replace(source, target)
+        return redacted
+    if isinstance(value, list):
+        return [redact_runtime_paths(item, workspace, secret_values) for item in value]
+    if isinstance(value, tuple):
+        return [redact_runtime_paths(item, workspace, secret_values) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: redact_runtime_paths(item, workspace, secret_values)
+            for key, item in value.items()
+        }
+    return value
+
+
 def run(command: list[str], cwd: Path, **kwargs: Any) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -276,12 +349,62 @@ def run(command: list[str], cwd: Path, **kwargs: Any) -> subprocess.CompletedPro
     )
 
 
+def isolated_agent_environment(workspace: Path, extra_env: dict[str, str] | None) -> dict[str, str]:
+    """Create a minimal per-fixture environment instead of inheriting host secrets."""
+
+    home = workspace.parent / ".agent-home"
+    temp = workspace.parent / ".agent-temp"
+    home.mkdir(exist_ok=True)
+    temp.mkdir(exist_ok=True)
+    environment = {
+        key: os.environ[key] for key in SAFE_AGENT_ENV_KEYS if key in os.environ
+    }
+    environment.update(
+        {
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+            "APPDATA": str(home / "AppData" / "Roaming"),
+            "LOCALAPPDATA": str(home / "AppData" / "Local"),
+            "TMP": str(temp),
+            "TEMP": str(temp),
+            "PYTHONUTF8": "1",
+        }
+    )
+    if extra_env:
+        environment.update(extra_env)
+    return environment
+
+
+def run_agent(
+    command: list[str], cwd: Path, agent_env: dict[str, str] | None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=isolated_agent_environment(cwd, agent_env),
+        timeout=600,
+    )
+
+
 def init_fixture(workspace: Path) -> str:
     shutil.copytree(
         FIXTURE_DIR,
         workspace,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
+    staged_skill = workspace / ".forward-skill"
+    shutil.copytree(
+        SKILL_DIR,
+        staged_skill,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store"),
+    )
+    if skill_artifact_sha256(staged_skill) != skill_artifact_sha256(SKILL_DIR):
+        raise RuntimeError("暂存到 fixture 的完整技能 artifact SHA-256 不匹配")
     for command in (
         ["git", "init"],
         ["git", "config", "user.email", "forward-test@example.invalid"],
@@ -295,10 +418,12 @@ def init_fixture(workspace: Path) -> str:
     return run(["git", "rev-parse", "HEAD"], workspace).stdout.strip()
 
 
-def expand_command(template: list[str], workspace: Path, prompt: str) -> list[str]:
+def expand_command(
+    template: list[str], workspace: Path, prompt: str, skill_dir: Path = SKILL_DIR
+) -> list[str]:
     values = {
         "workspace": str(workspace),
-        "skill_dir": str(SKILL_DIR),
+        "skill_dir": str(skill_dir),
         "prompt": prompt,
     }
     return [part.format(**values) for part in template]
@@ -312,45 +437,67 @@ def failed_case(
     command: list[str] | None = None,
     stdout: str = "",
     stderr: str = "",
+    workspace: Path | None = None,
+    secret_values: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Return a stable failure payload for timeout and infrastructure errors."""
 
-    return redact_sensitive(
-        {
-            "id": case["id"],
-            "prompt": case["prompt"],
-            "mode": case["mode"],
-            "status": "FAIL",
-            "checks": {kind: False},
-            "baseline_commit": None,
-            "agent_command": redact_command(command or []),
-            "agent_exit_code": None,
-            "raw_stdout": stdout,
-            "raw_stderr": stderr,
-            "before_test_exit_code": None,
-            "after_test_exit_code": None,
-            "git_status": "",
-            "git_diff": "",
-            "error": {"kind": kind, "message": message},
-        }
+    return redact_runtime_paths(
+        redact_sensitive(
+            {
+                "id": case["id"],
+                "prompt": case["prompt"],
+                "mode": case["mode"],
+                "status": "FAIL",
+                "checks": {kind: False},
+                "baseline_commit": None,
+                "agent_command": redact_command(command or []),
+                "agent_exit_code": None,
+                "raw_stdout": stdout,
+                "raw_stderr": stderr,
+                "before_test_exit_code": None,
+                "after_test_exit_code": None,
+                "git_status": "",
+                "git_diff": "",
+                "error": {"kind": kind, "message": message},
+            }
+        ),
+        workspace,
+        secret_values,
     )
 
 
-def evaluate_case(case: dict[str, str], command_template: list[str]) -> dict[str, Any]:
+def evaluate_case(
+    case: dict[str, str],
+    command_template: list[str],
+    agent_env: dict[str, str] | None = None,
+) -> dict[str, Any]:
     command: list[str] = []
+    workspace: Path | None = None
+    secret_values = tuple((agent_env or {}).values())
     try:
         with tempfile.TemporaryDirectory(prefix=f"pdo-forward-{case['id']}-") as temp:
             workspace = Path(temp) / "repo"
             baseline_commit = init_fixture(workspace)
+            staged_skill = workspace / ".forward-skill"
+            staged_skill_hash_before = skill_artifact_sha256(staged_skill)
             before_test = run(TEST_COMMAND, workspace)
-            command = expand_command(command_template, workspace, case["prompt"])
-            agent = run(command, workspace, timeout=600)
+            command = expand_command(
+                command_template, workspace, case["prompt"], staged_skill
+            )
+            agent = run_agent(command, workspace, agent_env)
             after_test = run(TEST_COMMAND, workspace)
             status = run(
                 ["git", "status", "--porcelain=v1", "--untracked-files=all"], workspace
             )
             diff = run(["git", "diff", "--no-ext-diff"], workspace)
             combined_output = f"{agent.stdout}\n{agent.stderr}"
+            try:
+                staged_skill_unchanged = (
+                    skill_artifact_sha256(staged_skill) == staged_skill_hash_before
+                )
+            except OSError:
+                staged_skill_unchanged = False
 
             if case["mode"] == "modify":
                 checks = {
@@ -362,8 +509,9 @@ def evaluate_case(case: dict[str, str], command_template: list[str]) -> dict[str
                         not line or line.endswith("frontend/useVideoJob.ts")
                         for line in status.stdout.splitlines()
                     ),
+                    "staged_skill_unchanged": staged_skill_unchanged,
                 }
-            else:
+            elif case["mode"] == "read_only":
                 checks = {
                     "agent_exit_zero": agent.returncode == 0,
                     "worktree_unchanged": not status.stdout.strip() and not diff.stdout.strip(),
@@ -374,25 +522,44 @@ def evaluate_case(case: dict[str, str], command_template: list[str]) -> dict[str
                         re.search(r"终态|terminal", combined_output, re.I)
                         and re.search(r"不一致|mismatch|failed", combined_output, re.I)
                     ),
+                    "staged_skill_unchanged": staged_skill_unchanged,
+                }
+            else:
+                checks = {
+                    "agent_exit_zero": agent.returncode == 0,
+                    "worktree_unchanged": not status.stdout.strip() and not diff.stdout.strip(),
+                    "offers_recommended_result_options": bool(
+                        re.search(r"推荐|建议", combined_output)
+                        and re.search(r"自动重试", combined_output)
+                        and re.search(r"手动重试", combined_output)
+                    ),
+                    "uses_repository_evidence": bool(
+                        re.search(r"仓库|状态|轮询|failed|终态", combined_output, re.I)
+                    ),
+                    "staged_skill_unchanged": staged_skill_unchanged,
                 }
 
-            return redact_sensitive(
-                {
-                    "id": case["id"],
-                    "prompt": case["prompt"],
-                    "mode": case["mode"],
-                    "status": "PASS" if all(checks.values()) else "FAIL",
-                    "checks": checks,
-                    "baseline_commit": baseline_commit,
-                    "agent_command": redact_command(command),
-                    "agent_exit_code": agent.returncode,
-                    "raw_stdout": agent.stdout,
-                    "raw_stderr": agent.stderr,
-                    "before_test_exit_code": before_test.returncode,
-                    "after_test_exit_code": after_test.returncode,
-                    "git_status": status.stdout,
-                    "git_diff": diff.stdout,
-                }
+            return redact_runtime_paths(
+                redact_sensitive(
+                    {
+                        "id": case["id"],
+                        "prompt": case["prompt"],
+                        "mode": case["mode"],
+                        "status": "PASS" if all(checks.values()) else "FAIL",
+                        "checks": checks,
+                        "baseline_commit": baseline_commit,
+                        "agent_command": redact_command(command),
+                        "agent_exit_code": agent.returncode,
+                        "raw_stdout": agent.stdout,
+                        "raw_stderr": agent.stderr,
+                        "before_test_exit_code": before_test.returncode,
+                        "after_test_exit_code": after_test.returncode,
+                        "git_status": status.stdout,
+                        "git_diff": diff.stdout,
+                    }
+                ),
+                workspace,
+                secret_values,
             )
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else exc.stdout
@@ -405,6 +572,8 @@ def evaluate_case(case: dict[str, str], command_template: list[str]) -> dict[str
             command=command or [str(part) for part in expired_command],
             stdout=stdout or "",
             stderr=stderr or "",
+            workspace=workspace,
+            secret_values=secret_values,
         )
     except Exception as exc:  # noqa: BLE001 - convert infrastructure failures to evidence
         return failed_case(
@@ -412,6 +581,8 @@ def evaluate_case(case: dict[str, str], command_template: list[str]) -> dict[str
             "infrastructure_error",
             f"{type(exc).__name__}: {exc}",
             command=command,
+            workspace=workspace,
+            secret_values=secret_values,
         )
 
 
@@ -429,6 +600,17 @@ def render_markdown(report: dict[str, Any]) -> str:
         "> 只有使用真实 Agent 命令生成的报告才是行为证据；`--self-test` 只验证 harness。",
         "",
     ]
+    candidate = report.get("candidate")
+    if isinstance(candidate, dict):
+        lines.extend(
+            [
+                "- 执行前技能 SHA-256："
+                f"`{candidate.get('skill_sha256_at_execution', 'unknown')}`",
+                "- 执行后技能 SHA-256："
+                f"`{candidate.get('skill_sha256_after_execution', 'unknown')}`",
+                "",
+            ]
+        )
     for case in report["cases"]:
         lines.extend(
             [
@@ -458,8 +640,33 @@ def write_report(report: dict[str, Any], output_dir: Path, prefix: str) -> None:
     (output_dir / f"{prefix}.md").write_text(render_markdown(report), encoding="utf-8")
 
 
-def run_suite(args: argparse.Namespace, command_template: list[str]) -> int:
-    cases = [evaluate_case(case, command_template) for case in CASES]
+def run_suite(
+    args: argparse.Namespace,
+    command_template: list[str],
+    agent_env: dict[str, str] | None = None,
+) -> int:
+    try:
+        skill_hash_before = skill_artifact_sha256(SKILL_DIR)
+    except OSError as exc:
+        print(
+            json.dumps(
+                {
+                    "status": "FAIL",
+                    "error": {
+                        "kind": "skill_artifact_hash_error",
+                        "message": redact_text(f"{type(exc).__name__}: {exc}"),
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 1
+    cases = [evaluate_case(case, command_template, agent_env) for case in CASES]
+    try:
+        skill_hash_after = skill_artifact_sha256(SKILL_DIR)
+    except OSError as exc:
+        skill_hash_after = f"unavailable: {type(exc).__name__}"
+    skill_unchanged = skill_hash_after == skill_hash_before
     report = redact_sensitive(
         {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -467,7 +674,17 @@ def run_suite(args: argparse.Namespace, command_template: list[str]) -> int:
             "client": args.client,
             "model": args.model,
             "configuration": args.configuration,
-            "status": "PASS" if all(case["status"] == "PASS" for case in cases) else "FAIL",
+            "candidate": {
+                "skill_path": "skills/production-delivery-orchestrator",
+                "skill_sha256_at_execution": skill_hash_before,
+                "skill_sha256_after_execution": skill_hash_after,
+                "skill_unchanged": skill_unchanged,
+            },
+            "status": (
+                "PASS"
+                if all(case["status"] == "PASS" for case in cases) and skill_unchanged
+                else "FAIL"
+            ),
             "cases": cases,
         }
     )
@@ -638,9 +855,13 @@ def self_test() -> int:
         helper = Path(temp) / "fake_agent.py"
         helper.write_text(
             """from pathlib import Path
+import os
 import sys
 prompt = sys.argv[1]
-if '先不要修改' in prompt:
+Path(os.environ['HOME']).joinpath('client-state').write_text('synthetic runtime state', encoding='utf-8')
+if '自动重试，还是让用户手动重试' in prompt:
+    print('仓库当前没有自动重试策略；推荐：失败后展示手动重试。选项：自动重试，或手动重试。')
+elif '先不要修改' in prompt:
     print('轮询不会停止，因为 failed 终态与前端 terminal 状态不一致')
 else:
     path = Path('frontend/useVideoJob.ts')
@@ -662,6 +883,31 @@ else:
         return result
 
 
+def load_agent_env_file(path: Path | None) -> dict[str, str]:
+    """Read explicit runtime credentials without inheriting the host environment."""
+
+    if path is None:
+        return {}
+    values: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ValueError(f"无法读取 agent 环境文件: {type(exc).__name__}: {exc}") from exc
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, separator, value = line.partition("=")
+        if not separator or not ENV_NAME_RE.fullmatch(key):
+            raise ValueError(f"agent 环境文件第 {line_number} 行必须是 KEY=VALUE")
+        if key in RESERVED_AGENT_ENV_KEYS:
+            raise ValueError(f"agent 环境文件不得覆盖受控变量: {key}")
+        if key in values:
+            raise ValueError(f"agent 环境文件不得重复变量: {key}")
+        values[key] = value
+    return values
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="可配置真实 Agent CLI 的新上下文 forward-test")
     parser.add_argument("--client", default="custom-agent-cli")
@@ -676,6 +922,16 @@ def parse_args() -> argparse.Namespace:
         nargs=argparse.REMAINDER,
         help="真实命令模板；支持 {workspace}、{skill_dir}、{prompt} 占位符，必须放在最后。",
     )
+    parser.add_argument(
+        "--agent-env-file",
+        type=Path,
+        help="仅传给 Agent 子进程的 KEY=VALUE 文件；内容不会写入报告。",
+    )
+    parser.add_argument(
+        "--allow-unsafe-host-execution",
+        action="store_true",
+        help="确认当前命令不在 OS/容器沙箱中执行真实 Agent；优先在外部沙箱中运行。",
+    )
     return parser.parse_args()
 
 
@@ -689,7 +945,19 @@ def main() -> int:
     if not args.agent_command:
         print("未提供 --agent-command；真实 forward-test 状态为 NOT_RUN。", file=sys.stderr)
         return 2
-    return run_suite(args, args.agent_command)
+    if not args.allow_unsafe_host_execution:
+        print(
+            "拒绝在未确认的宿主环境执行真实 Agent；请使用外部 OS/容器沙箱，"
+            "或明确传入 --allow-unsafe-host-execution。",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        agent_env = load_agent_env_file(args.agent_env_file)
+    except ValueError as error:
+        print(f"agent 环境文件无效：{error}", file=sys.stderr)
+        return 1
+    return run_suite(args, args.agent_command, agent_env)
 
 
 if __name__ == "__main__":

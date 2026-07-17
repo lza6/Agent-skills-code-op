@@ -431,21 +431,25 @@ python evals\production-delivery-orchestrator\run_evals.py `
 
 ```powershell
 python evals\production-delivery-orchestrator\run_forward_tests.py --self-test
-python evals\production-delivery-orchestrator\run_forward_tests.py `
-  --verify-record evals\production-delivery-orchestrator\reports\forward-tests.json
+python evals\production-delivery-orchestrator\run_client_matrix.py
 ```
 
-`--self-test` 只使用本地合成 helper 验证 harness，不是模型行为证据。要执行新的真实 Agent 测试，必须显式提供命令模板，例如：
+`--self-test` 只使用本地合成 helper 验证 harness，不是模型行为证据。`run_client_matrix.py` 默认也只探测本机客户端，不会调用模型，结果必为 `NOT_RUN`。当前注册表包含基于本机 `--help` 核对的 Codex CLI、Claude Code 和 Gemini CLI 命令模板；Windows 使用 `.cmd`，Linux/macOS 使用无后缀命令。若探测版本与 registry 记录不一致，矩阵会标记 `VERSION_MISMATCH` 并拒绝发起真实样本，先更新并复测该命令模板。
+
+要真实采集某个客户端的新证据，必须显式执行 `--execute --allow-unsafe-host-execution`。第二个开关故意使用危险名称：runner 会使用临时 fixture、临时 HOME、最小子进程环境和临时技能副本，但它**不能**把 Claude Code 或 Gemini CLI 变成 OS/容器沙箱。生产样本应在你控制的 VM、容器或专用测试账号中运行。这可能消耗订阅额度或 API 配额：
 
 ```powershell
-python evals\production-delivery-orchestrator\run_forward_tests.py `
-  --client codex-cli `
-  --agent-command codex exec --full-auto --cd "{workspace}" "Use production-delivery-orchestrator at {skill_dir} to solve: {prompt}"
+python evals\production-delivery-orchestrator\run_client_matrix.py `
+  --clients claude-code `
+  --execute `
+  --allow-unsafe-host-execution
 ```
 
-没有 `--agent-command` 时脚本退出 `2` 并标记 `NOT_RUN`，不会伪造 PASS。当前两次 Codex 新上下文真实测试的输入、完整技能 artifact hash、最终输出摘要、fixture commit、diff、测试结果和限制保存在 `reports/forward-tests.json` 与 `reports/forward-tests.md`；任一技能文件内容或路径变化都会使旧记录失效。哈希会把 UTF-8 文本的 CRLF/CR 统一为 LF，但保持二进制原始字节，因此 Windows/Linux checkout 可比较且不会掩盖真实内容变化。
+一次矩阵运行会为每个客户端写出独立的 JSON/Markdown 报告，以及汇总 `client-matrix.json`。每轮会把完整技能复制到 fixture 后再执行，并检测副本是否被 Agent 修改；runner 不继承宿主的 API Key、云凭据或用户 HOME。确有必要时，通过 `--agent-env-file` 提供最小 `KEY=VALUE` 集合；其值会从落盘报告脱敏。报告记录执行前后完整技能 artifact SHA-256；只要技能内容或路径变化，旧样本就不会被当成当前版本证据。哈希会把 UTF-8 文本的 CRLF/CR 统一为 LF，但保持二进制原始字节，因此 Windows/Linux checkout 可比较且不会掩盖真实内容变化。
 
-仓库的 GitHub Actions 会在 Windows 和 Linux 上运行同一组自测、真实 Git 基线对照、已知坏候选阻断、forward-test harness/记录与脱敏安全测试、真实临时安装集成测试和空白错误检查。
+`reports/forward-tests.json` 中的两次 Codex 子任务记录是 `v1.0.1` 对应 artifact 的历史证据，不是 Claude Code、Gemini 或当前工作树的行为结论。修改技能后用 `--verify-record` 验证该文件应失败并提示陈旧；只有在当前 artifact 上重新运行真实 CLI 才能产生新的 PASS 证据。没有 `--agent-command` 的低层 harness 仍会退出 `2` 并标记 `NOT_RUN`，不会伪造 PASS；自定义客户端可继续直接传入命令模板。
+
+仓库的 GitHub Actions 会在 Windows 和 Linux 上运行同一组自测、真实 Git 基线对照、已知坏候选阻断、forward-test harness/矩阵配置与脱敏安全测试、真实临时安装集成测试和空白错误检查；不会在 CI 中消耗模型额度生成新的真实样本。
 
 ## 常见问题
 
