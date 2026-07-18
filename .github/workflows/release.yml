@@ -6,12 +6,127 @@ on:
       - "v*"
 
 permissions:
-  contents: write
-  attestations: write
-  id-token: write
+  contents: read
 
 jobs:
+  quality:
+    permissions:
+      contents: read
+    env:
+      PYTHONUTF8: "1"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11"]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Validate Python syntax
+        run: >-
+          python -c "from pathlib import Path;
+          compile(Path('skills/production-delivery-orchestrator/scripts/install_skill.py').read_text(encoding='utf-8'),
+          'install_skill.py', 'exec');
+          compile(Path('skills/production-delivery-orchestrator/scripts/repository_inventory.py').read_text(encoding='utf-8'),
+          'repository_inventory.py', 'exec');
+          compile(Path('evals/production-delivery-orchestrator/run_evals.py').read_text(encoding='utf-8'),
+          'run_evals.py', 'exec');
+          compile(Path('evals/production-delivery-orchestrator/run_forward_tests.py').read_text(encoding='utf-8'),
+          'run_forward_tests.py', 'exec');
+          compile(Path('evals/production-delivery-orchestrator/run_client_matrix.py').read_text(encoding='utf-8'),
+          'run_client_matrix.py', 'exec');
+          compile(Path('release/build_release.py').read_text(encoding='utf-8'),
+          'build_release.py', 'exec')"
+
+      - name: Run workflow governance and credential checks
+        run: >-
+          python -m unittest discover
+          -s .github/workflows/tests
+          -p "test_*.py"
+          -v
+
+      - name: Run release builder tests
+        run: python -m unittest discover -s release/tests -p "test_*.py" -v
+
+      - name: Run evaluation self-test
+        run: python evals/production-delivery-orchestrator/run_evals.py --self-test
+
+      - name: Compare published baseline with candidate
+        run: >-
+          python evals/production-delivery-orchestrator/run_evals.py
+          --output-dir .eval-reports
+          --report-prefix ci
+
+      - name: Validate forward-test harness without spending provider quota
+        run: python evals/production-delivery-orchestrator/run_forward_tests.py --self-test
+
+      - name: Run forward-test security and evidence tests
+        run: >-
+          python -m unittest discover
+          -s evals/production-delivery-orchestrator/tests
+          -p "test_*.py"
+          -v
+
+      - name: Confirm known-bad candidate is rejected
+        run: >-
+          python -c "import subprocess, sys;
+          result = subprocess.run([sys.executable,
+          'evals/production-delivery-orchestrator/run_evals.py',
+          '--candidate',
+          'evals/production-delivery-orchestrator/baselines/legacy-monolithic-proxy.md',
+          '--output-dir', '.eval-reports', '--report-prefix', 'known-bad']);
+          raise SystemExit(0 if result.returncode == 1 else 1)"
+
+      - name: Run real installer integration tests
+        run: >-
+          python -m unittest discover
+          -s skills/production-delivery-orchestrator/tests
+          -p "test_*.py"
+          -v
+
+      - name: Check whitespace errors in changed event range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          zero_sha="0000000000000000000000000000000000000000"
+          head_sha="${HEAD_SHA:?missing GitHub head SHA}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base_sha="${PR_BASE_SHA:?missing pull request base SHA}"
+          elif [ "${EVENT_BEFORE:-}" != "$zero_sha" ] && [ -n "${EVENT_BEFORE:-}" ]; then
+            base_sha="$EVENT_BEFORE"
+          else
+            head_sha="$(git rev-parse "${head_sha}^{}")"
+            if [ "$REF_TYPE" = "tag" ] && base_sha="$(git rev-parse "${head_sha}^" 2>/dev/null)"; then
+              :
+            else
+              base_sha="$(git hash-object -t tree /dev/null)"
+            fi
+          fi
+          git diff --check "$base_sha" "$head_sha"
+
   publish:
+    needs: quality
+    permissions:
+      contents: write
+      attestations: write
+      id-token: write
     runs-on: ubuntu-latest
 
     steps:

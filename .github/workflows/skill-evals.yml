@@ -45,6 +45,13 @@ jobs:
           compile(Path('release/build_release.py').read_text(encoding='utf-8'),
           'build_release.py', 'exec')"
 
+      - name: Run workflow governance and credential checks
+        run: >-
+          python -m unittest discover
+          -s .github/workflows/tests
+          -p "test_*.py"
+          -v
+
       - name: Build and verify release artifacts from metadata
         run: >-
           python release/build_release.py --output-dir .release-artifacts &&
@@ -89,5 +96,28 @@ jobs:
           -p "test_*.py"
           -v
 
-      - name: Check whitespace errors
-        run: git diff --check
+      - name: Check whitespace errors in changed event range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          zero_sha="0000000000000000000000000000000000000000"
+          head_sha="${HEAD_SHA:?missing GitHub head SHA}"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base_sha="${PR_BASE_SHA:?missing pull request base SHA}"
+          elif [ "${EVENT_BEFORE:-}" != "$zero_sha" ] && [ -n "${EVENT_BEFORE:-}" ]; then
+            base_sha="$EVENT_BEFORE"
+          else
+            head_sha="$(git rev-parse "${head_sha}^{}")"
+            if [ "$REF_TYPE" = "tag" ] && base_sha="$(git rev-parse "${head_sha}^" 2>/dev/null)"; then
+              :
+            else
+              base_sha="$(git hash-object -t tree /dev/null)"
+            fi
+          fi
+          git diff --check "$base_sha" "$head_sha"
