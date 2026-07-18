@@ -9,6 +9,9 @@
       "executables": { "windows": "codex.cmd", "posix": "codex" },
       "probe_args": ["--version"],
       "configuration": "non-interactive; ephemeral; workspace-write CLI sandbox; host execution still requires an explicit opt-in",
+      "allowed_env_keys": ["OPENAI_API_KEY"],
+      "credential_sets": [["OPENAI_API_KEY"]],
+      "host_config": { "env_key": "CODEX_HOME", "default_dir": ".codex" },
       "agent_args": [
         "exec",
         "--ephemeral",
@@ -26,8 +29,13 @@
       "executables": { "windows": "claude.cmd", "posix": "claude" },
       "probe_args": ["--version"],
       "configuration": "print mode; no session persistence; auto permission mode; host execution still requires an explicit opt-in",
+      "allowed_env_keys": ["ANTHROPIC_API_KEY"],
+      "credential_sets": [["ANTHROPIC_API_KEY"]],
+      "host_config": { "env_key": "CLAUDE_CONFIG_DIR", "default_dir": ".claude" },
+      "host_config_remove_args": ["--bare"],
       "agent_args": [
         "--print",
+        "--bare",
         "--no-session-persistence",
         "--permission-mode",
         "auto",
@@ -41,7 +49,26 @@
       "executables": { "windows": "gemini.cmd", "posix": "gemini" },
       "probe_args": ["--version"],
       "configuration": "headless prompt; auto_edit approval mode; host execution still requires an explicit opt-in",
+      "allowed_env_keys": [
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_GENAI_USE_VERTEXAI",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "GOOGLE_APPLICATION_CREDENTIALS"
+      ],
+      "credential_sets": [
+        ["GEMINI_API_KEY"],
+        ["GOOGLE_API_KEY"],
+        [
+          "GOOGLE_GENAI_USE_VERTEXAI",
+          "GOOGLE_CLOUD_PROJECT",
+          "GOOGLE_CLOUD_LOCATION",
+          "GOOGLE_APPLICATION_CREDENTIALS"
+        ]
+      ],
       "agent_args": [
+        "--skip-trust",
         "--approval-mode",
         "auto_edit",
         "--prompt",

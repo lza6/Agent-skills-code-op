@@ -11,10 +11,12 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,14 @@ PROFILE_ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,62}$")
 PLACEHOLDER_RE = re.compile(r"\{([^{}]+)\}")
 REQUIRED_PLACEHOLDERS = {"workspace", "skill_dir", "prompt"}
 SEMVER_RE = re.compile(r"(?<![0-9A-Za-z.+-])(\d+\.\d+\.\d+)(?![0-9A-Za-z.+-])")
+HOST_CONFIG_ENV_KEYS = {"CODEX_HOME", "CLAUDE_CONFIG_DIR"}
+HOST_CONFIG_DIR_RE = re.compile(r"^\.[a-z0-9][a-z0-9-]{0,62}$")
+HOST_CONFIG_REMOVABLE_ARGS = {"--bare"}
+HOST_NETWORK_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+)
 
 
 def load_harness() -> Any:
@@ -48,6 +58,18 @@ def require_string_list(value: Any, field: str, profile_id: str) -> list[str]:
         not isinstance(item, str) or not item for item in value
     ):
         raise ValueError(f"profile {profile_id}.{field} 必须是非空字符串数组")
+    return value
+
+
+def require_env_key_list(
+    value: Any, field: str, profile_id: str, *, allow_empty: bool
+) -> list[str]:
+    if not isinstance(value, list) or (not allow_empty and not value):
+        raise ValueError(f"profile {profile_id}.{field} 必须是字符串数组")
+    if any(not isinstance(item, str) or not HARNESS.ENV_NAME_RE.fullmatch(item) for item in value):
+        raise ValueError(f"profile {profile_id}.{field} 必须只包含有效环境变量名")
+    if len(value) != len(set(value)):
+        raise ValueError(f"profile {profile_id}.{field} 不得重复变量")
     return value
 
 
@@ -73,6 +95,54 @@ def validate_profile(value: Any) -> dict[str, Any]:
         raise ValueError(f"profile {profile_id}.executables 的值必须是非空字符串")
     probe_args = require_string_list(value.get("probe_args"), "probe_args", profile_id)
     agent_args = require_string_list(value.get("agent_args"), "agent_args", profile_id)
+    allowed_env_keys = require_env_key_list(
+        value.get("allowed_env_keys"), "allowed_env_keys", profile_id, allow_empty=True
+    )
+    credential_sets_value = value.get("credential_sets")
+    if not isinstance(credential_sets_value, list):
+        raise ValueError(f"profile {profile_id}.credential_sets 必须是数组")
+    credential_sets = [
+        require_env_key_list(
+            credential_set,
+            f"credential_sets[{index}]",
+            profile_id,
+            allow_empty=False,
+        )
+        for index, credential_set in enumerate(credential_sets_value)
+    ]
+    if any(not set(credential_set).issubset(allowed_env_keys) for credential_set in credential_sets):
+        raise ValueError(
+            f"profile {profile_id}.credential_sets 只能引用 allowed_env_keys 中的变量"
+        )
+    host_config = value.get("host_config")
+    if host_config is not None:
+        if not isinstance(host_config, dict) or set(host_config) != {"env_key", "default_dir"}:
+            raise ValueError(
+                f"profile {profile_id}.host_config 必须只包含 env_key 和 default_dir"
+            )
+        if host_config.get("env_key") not in HOST_CONFIG_ENV_KEYS:
+            raise ValueError(f"profile {profile_id}.host_config.env_key 不受支持")
+        default_dir = host_config.get("default_dir")
+        if not isinstance(default_dir, str) or not HOST_CONFIG_DIR_RE.fullmatch(default_dir):
+            raise ValueError(
+                f"profile {profile_id}.host_config.default_dir 必须是安全的单级隐藏目录"
+            )
+    host_config_remove_args = value.get("host_config_remove_args", [])
+    if not isinstance(host_config_remove_args, list) or any(
+        not isinstance(item, str) for item in host_config_remove_args
+    ):
+        raise ValueError(f"profile {profile_id}.host_config_remove_args 必须是字符串数组")
+    if len(host_config_remove_args) != len(set(host_config_remove_args)):
+        raise ValueError(f"profile {profile_id}.host_config_remove_args 不得重复")
+    if host_config is None and host_config_remove_args:
+        raise ValueError(f"profile {profile_id}.host_config_remove_args 需要 host_config")
+    if any(
+        item not in HOST_CONFIG_REMOVABLE_ARGS or item not in agent_args
+        for item in host_config_remove_args
+    ):
+        raise ValueError(
+            f"profile {profile_id}.host_config_remove_args 包含不允许或不存在的参数"
+        )
     placeholders = {
         placeholder
         for part in agent_args
@@ -92,6 +162,10 @@ def validate_profile(value: Any) -> dict[str, Any]:
         "probe_command": [executable, *probe_args],
         "configuration": value["configuration"].strip(),
         "agent_command": [executable, *agent_args],
+        "allowed_env_keys": allowed_env_keys,
+        "credential_sets": credential_sets,
+        "host_config": host_config,
+        "host_config_remove_args": host_config_remove_args,
     }
 
 
@@ -112,9 +186,14 @@ def load_profiles(path: Path) -> dict[str, dict[str, Any]]:
     return {profile["id"]: profile for profile in profiles}
 
 
-def probe_profile(profile: dict[str, Any]) -> dict[str, Any]:
+def probe_profile(profile: dict[str, Any], runtime_root: Path | None = None) -> dict[str, Any]:
+    if runtime_root is None:
+        with tempfile.TemporaryDirectory(prefix="pdo-client-probe-") as temp:
+            return probe_profile(profile, Path(temp))
+
     command = profile["probe_command"]
-    executable = shutil.which(command[0])
+    probe_env = HARNESS.isolated_probe_environment(runtime_root)
+    executable = shutil.which(command[0], path=probe_env.get("PATH"))
     base = {
         "id": profile["id"],
         "client": profile["client"],
@@ -126,7 +205,8 @@ def probe_profile(profile: dict[str, Any]) -> dict[str, Any]:
     try:
         completed = HARNESS.run_bounded_process(
             command,
-            cwd=Path.cwd(),
+            cwd=runtime_root,
+            env=probe_env,
             timeout=30,
         )
     except subprocess.TimeoutExpired as error:
@@ -191,11 +271,74 @@ def probe_profile(profile: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def filter_profile_agent_env(
+    profile: dict[str, Any], agent_env: dict[str, str]
+) -> tuple[dict[str, str], bool]:
+    """Pass only profile-approved credentials and verify one accepted set is present."""
+
+    filtered = {
+        key: agent_env[key]
+        for key in profile["allowed_env_keys"]
+        if key in agent_env
+    }
+    credential_sets = profile["credential_sets"]
+    credential_ready = not credential_sets or any(
+        all(bool(filtered.get(key)) for key in credential_set)
+        for credential_set in credential_sets
+    )
+    return filtered, credential_ready
+
+
+def resolve_host_client_config(profile: dict[str, Any]) -> dict[str, str] | None:
+    """Return one opt-in CLI config root without reading or copying its contents."""
+
+    host_config = profile.get("host_config")
+    if host_config is None:
+        return None
+    env_key = host_config["env_key"]
+    configured_root = os.environ.get(env_key)
+    if configured_root:
+        root = Path(configured_root).expanduser()
+    else:
+        user_home = os.environ.get("USERPROFILE") or os.environ.get("HOME")
+        root = Path(user_home) if user_home else Path.home()
+        root /= host_config["default_dir"]
+    try:
+        root = root.resolve(strict=True)
+    except OSError:
+        return None
+    return {env_key: str(root)} if root.is_dir() else None
+
+
+def resolve_host_network_environment() -> dict[str, str]:
+    """Read only explicit proxy variables when the caller accepted host networking."""
+
+    values: dict[str, str] = {}
+    for key in HOST_NETWORK_ENV_KEYS:
+        value = os.environ.get(key) or os.environ.get(key.lower())
+        if value:
+            values[key] = value
+    return values
+
+
+def agent_command_for_authentication(
+    profile: dict[str, Any], authentication_source: str
+) -> list[str]:
+    """Keep the default isolated command, with the audited host-auth exception only."""
+
+    command = profile["agent_command"]
+    if authentication_source != "host_config":
+        return command
+    remove_args = set(profile["host_config_remove_args"])
+    return [argument for argument in command if argument not in remove_args]
+
+
 def execute_profile(
     profile: dict[str, Any],
     output_dir: Path,
     report_prefix: str,
     agent_env: dict[str, str],
+    authentication_source: str,
 ) -> dict[str, Any]:
     report_prefix = HARNESS.validate_report_prefix(report_prefix)
     profile_args = argparse.Namespace(
@@ -220,6 +363,7 @@ def execute_profile(
         "status": report.get("status", "FAIL"),
         "exit_code": result,
         "report": report_path.name,
+        "authentication_source": authentication_source,
     }
 
 
@@ -245,18 +389,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "> `NOT_RUN` 表示只完成了本地 CLI 探测；它不是任何模型行为通过的证据。",
         "",
-        "| Profile | 本机探测 | 观察版本 | 本次执行 | 证据 |",
-        "|---|---|---|---|---|",
+        "| Profile | 本机探测 | 观察版本 | 本次执行 | 认证来源 | 证据 |",
+        "|---|---|---|---|---|---|",
     ]
     run_map = {item["id"]: item for item in report["runs"]}
     for probe in report["probes"]:
         run = run_map.get(probe["id"], {})
         lines.append(
-            "| {id} | {probe} | {version} | {run} | {evidence} |".format(
+            "| {id} | {probe} | {version} | {run} | {auth} | {evidence} |".format(
                 id=probe["id"],
                 probe=probe["status"],
                 version=probe["observed_version"],
                 run=run.get("status", "NOT_RUN"),
+                auth=run.get("authentication_source", "-"),
                 evidence=run.get("report", run.get("message", "-")),
             )
         )
@@ -299,6 +444,22 @@ def parse_args() -> argparse.Namespace:
         help="确认当前不是 OS/容器沙箱；优先在外部沙箱中运行真实样本。",
     )
     parser.add_argument(
+        "--allow-host-client-config",
+        action="store_true",
+        help=(
+            "只为支持的已登录 CLI 暴露其配置根目录；必须与 --execute 和 "
+            "--allow-unsafe-host-execution 同时使用，且不会复制或写出凭证。"
+        ),
+    )
+    parser.add_argument(
+        "--allow-host-network-configuration",
+        action="store_true",
+        help=(
+            "只传入已存在的 HTTP(S)_PROXY/NO_PROXY 到 Agent 子进程；必须与 "
+            "--execute 和 --allow-unsafe-host-execution 同时使用，值不会写入报告。"
+        ),
+    )
+    parser.add_argument(
         "--agent-env-file",
         type=Path,
         help="仅传入 Agent 子进程的 KEY=VALUE 文件；其值会从持久化报告中脱敏。",
@@ -317,6 +478,13 @@ def main() -> int:
         if unknown:
             raise ValueError(f"未知 profile: {', '.join(unknown)}")
         selected = [profiles[profile_id] for profile_id in selected_ids]
+        if (args.allow_host_client_config or args.allow_host_network_configuration) and not (
+            args.execute and args.allow_unsafe_host_execution
+        ):
+            raise ValueError(
+                "宿主配置开关必须与 --execute 和 "
+                "--allow-unsafe-host-execution 同时使用"
+            )
         if args.execute:
             args.report_prefix = validate_execution_report_prefix(
                 args.report_prefix, selected
@@ -329,9 +497,12 @@ def main() -> int:
     runs: list[dict[str, Any]] = []
     execution_authorized = args.execute and args.allow_unsafe_host_execution
     agent_env: dict[str, str] = {}
+    host_network_env: dict[str, str] = {}
     if execution_authorized:
         try:
             agent_env = HARNESS.load_agent_env_file(args.agent_env_file)
+            if args.allow_host_network_configuration:
+                host_network_env = resolve_host_network_environment()
         except ValueError as error:
             print(json.dumps({"status": "FAIL", "error": str(error)}, ensure_ascii=False))
             return 1
@@ -355,11 +526,49 @@ def main() -> int:
                     }
                 )
                 continue
-            runs.append(
-                execute_profile(
-                    profile, args.output_dir, args.report_prefix, agent_env
+            profile_env, credential_ready = filter_profile_agent_env(profile, agent_env)
+            authentication_source = "explicit_env" if credential_ready else None
+            if not credential_ready and args.allow_host_client_config:
+                host_config_env = resolve_host_client_config(profile)
+                if host_config_env is not None:
+                    profile_env.update(host_config_env)
+                    credential_ready = True
+                    authentication_source = "host_config"
+            if not credential_ready:
+                runs.append(
+                    {
+                        "id": profile["id"],
+                        "status": "NOT_RUN",
+                        "message": "未提供该 profile 所需认证；未调用真实 Agent",
+                    }
                 )
+                continue
+            if host_network_env:
+                profile_env.update(host_network_env)
+            execution_profile = {
+                **profile,
+                "agent_command": agent_command_for_authentication(
+                    profile, authentication_source or "unknown"
+                ),
+                "configuration": (
+                    profile["configuration"]
+                    + "; explicit host-config authentication"
+                    if authentication_source == "host_config"
+                    else profile["configuration"]
+                ),
+            }
+            run = execute_profile(
+                execution_profile,
+                args.output_dir,
+                args.report_prefix,
+                profile_env,
+                authentication_source or "unknown",
             )
+            run["authentication_source"] = authentication_source or "unknown"
+            run["network_configuration_source"] = (
+                "host_proxy" if host_network_env else "isolated"
+            )
+            runs.append(run)
 
     if not execution_authorized:
         status = "NOT_RUN"

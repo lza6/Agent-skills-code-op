@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "skills": [
+    {
+      "description": "将模糊故障或复杂软件交付请求推进到有证据、可验证、可收敛的结果。用于端到端修复与实现、跨模块重构、生产级验收、异步任务、仓库自动侦察、独立审查闭环，以及“全能模式”“老板模式”“直接落地”“修复视频任务”“页面一直转圈”等请求；也用于用户只描述现象、需要智能体自行扫描代码库和拆解深层意图的情况。不用于纯事实问答、普通代码解释、只需单个代码片段或非软件请求。",
+      "name": "production-delivery-orchestrator",
+      "path": "skills/production-delivery-orchestrator/SKILL.md"
+    }
+  ]
+}

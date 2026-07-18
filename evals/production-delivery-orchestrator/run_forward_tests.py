@@ -154,15 +154,49 @@ SAFE_AGENT_ENV_KEYS = (
     "LC_CTYPE",
 )
 ENV_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-RESERVED_AGENT_ENV_KEYS = {
-    *SAFE_AGENT_ENV_KEYS,
+CONTROLLED_RUNTIME_ENV_KEYS = {
     "HOME",
     "USERPROFILE",
     "APPDATA",
     "LOCALAPPDATA",
     "TMP",
     "TEMP",
+    "CODEX_HOME",
+    "CLAUDE_CONFIG_DIR",
+}
+HIGH_RISK_RUNTIME_ENV_KEYS = {
+    *SAFE_AGENT_ENV_KEYS,
     "PYTHONUTF8",
+    "PYTHONIOENCODING",
+    "PYTHONPATH",
+    "PYTHONHOME",
+    "PYTHONSAFEPATH",
+    "VIRTUAL_ENV",
+    "CONDA_PREFIX",
+    "NODE_OPTIONS",
+    "NODE_PATH",
+    "NPM_CONFIG_USERCONFIG",
+    "NPM_CONFIG_PREFIX",
+    "NPM_PREFIX",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_ASKPASS",
+    "SSH_ASKPASS",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES",
+    "DYLD_LIBRARY_PATH",
+    "BASH_ENV",
+    "ENV",
+    "PROMPT_COMMAND",
+}
+RESERVED_AGENT_ENV_KEYS = {
+    *CONTROLLED_RUNTIME_ENV_KEYS,
+    *HIGH_RISK_RUNTIME_ENV_KEYS,
 }
 REPORT_PREFIX_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 AGENT_TIMEOUT_SECONDS = 600
@@ -722,6 +756,9 @@ def redact_runtime_paths(
 
 
 def run(command: list[str], cwd: Path, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+    """Run a general local command, optionally with an explicit minimal environment."""
+
+    environment = kwargs.pop("env", None)
     return subprocess.run(
         command,
         cwd=cwd,
@@ -730,18 +767,20 @@ def run(command: list[str], cwd: Path, **kwargs: Any) -> subprocess.CompletedPro
         text=True,
         encoding="utf-8",
         errors="replace",
-        env={**os.environ, "PYTHONUTF8": "1"},
+        env=environment if environment is not None else {**os.environ, "PYTHONUTF8": "1"},
         **kwargs,
     )
 
 
-def isolated_agent_environment(workspace: Path, extra_env: dict[str, str] | None) -> dict[str, str]:
-    """Create a minimal per-fixture environment instead of inheriting host secrets."""
+def _minimal_runtime_environment(runtime_root: Path, label: str) -> dict[str, str]:
+    """Build a controlled runtime environment without inheriting host state."""
 
-    home = workspace.parent / ".agent-home"
-    temp = workspace.parent / ".agent-temp"
-    home.mkdir(exist_ok=True)
-    temp.mkdir(exist_ok=True)
+    home = runtime_root / f".{label}-home"
+    temp = runtime_root / f".{label}-temp"
+    codex_home = runtime_root / f".{label}-codex-home"
+    claude_config_dir = runtime_root / f".{label}-claude-config"
+    for directory in (home, temp, codex_home, claude_config_dir):
+        directory.mkdir(parents=True, exist_ok=True)
     environment = {
         key: os.environ[key] for key in SAFE_AGENT_ENV_KEYS if key in os.environ
     }
@@ -753,9 +792,31 @@ def isolated_agent_environment(workspace: Path, extra_env: dict[str, str] | None
             "LOCALAPPDATA": str(home / "AppData" / "Local"),
             "TMP": str(temp),
             "TEMP": str(temp),
+            "CODEX_HOME": str(codex_home),
+            "CLAUDE_CONFIG_DIR": str(claude_config_dir),
             "PYTHONUTF8": "1",
+            "PYTHONIOENCODING": "utf-8",
         }
     )
+    return environment
+
+
+def isolated_fixture_environment(workspace: Path) -> dict[str, str]:
+    """Environment for fixture git/test/diff commands, kept outside the repository."""
+
+    return _minimal_runtime_environment(workspace.parent, "fixture")
+
+
+def isolated_probe_environment(runtime_root: Path) -> dict[str, str]:
+    """Environment for a local CLI version probe, without host config or credentials."""
+
+    return _minimal_runtime_environment(runtime_root, "probe")
+
+
+def isolated_agent_environment(workspace: Path, extra_env: dict[str, str] | None) -> dict[str, str]:
+    """Create a minimal per-fixture Agent environment instead of inheriting host secrets."""
+
+    environment = _minimal_runtime_environment(workspace.parent, "agent")
     if extra_env:
         environment.update(extra_env)
     return environment
@@ -864,6 +925,7 @@ def run_bounded_process(
     *,
     env: dict[str, str] | None = None,
     timeout: float = AGENT_TIMEOUT_SECONDS,
+    allow_windows_launcher_child: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run one command with a bounded combined output buffer and timeout cleanup.
 
@@ -925,8 +987,18 @@ def run_bounded_process(
     for reader in readers:
         reader.start()
 
+    deadline = time.monotonic() + timeout
     try:
         return_code = process.wait(timeout=timeout)
+        if windows_job is not None and allow_windows_launcher_child:
+            # A .cmd launcher can exit after it starts the real Node-based CLI.
+            # The child is still inside the Job and owns the inherited output pipes,
+            # so let it finish under the original deadline instead of killing it as
+            # an orphan merely because the wrapper already returned.
+            while windows_job.active_process_count() > 0:
+                if time.monotonic() >= deadline:
+                    raise subprocess.TimeoutExpired(command, timeout)
+                time.sleep(0.05)
     except subprocess.TimeoutExpired:
         cleanup_errors, _ = _cleanup_process_containment(
             process, windows_job, linux_subreaper
@@ -1003,6 +1075,9 @@ def run_agent(
         cwd=cwd,
         env=isolated_agent_environment(cwd, agent_env),
         timeout=AGENT_TIMEOUT_SECONDS,
+        allow_windows_launcher_child=(
+            os.name == "nt" and command[0].lower().endswith(".cmd")
+        ),
     )
 
 
@@ -1020,6 +1095,7 @@ def init_fixture(workspace: Path) -> str:
     )
     if skill_artifact_sha256(staged_skill) != skill_artifact_sha256(SKILL_DIR):
         raise RuntimeError("暂存到 fixture 的完整技能 artifact SHA-256 不匹配")
+    fixture_env = isolated_fixture_environment(workspace)
     for command in (
         ["git", "init"],
         ["git", "config", "user.email", "forward-test@example.invalid"],
@@ -1027,10 +1103,10 @@ def init_fixture(workspace: Path) -> str:
         ["git", "add", "."],
         ["git", "commit", "-m", "fixture baseline"],
     ):
-        result = run(command, workspace)
+        result = run(command, workspace, env=fixture_env)
         if result.returncode != 0:
             raise RuntimeError(result.stderr or result.stdout)
-    return run(["git", "rev-parse", "HEAD"], workspace).stdout.strip()
+    return run(["git", "rev-parse", "HEAD"], workspace, env=fixture_env).stdout.strip()
 
 
 def expand_command(
@@ -1098,18 +1174,21 @@ def evaluate_case(
         with tempfile.TemporaryDirectory(prefix=f"pdo-forward-{case['id']}-") as temp:
             workspace = Path(temp) / "repo"
             baseline_commit = init_fixture(workspace)
+            fixture_env = isolated_fixture_environment(workspace)
             staged_skill = workspace / ".forward-skill"
             staged_skill_hash_before = skill_artifact_sha256(staged_skill)
-            before_test = run(TEST_COMMAND, workspace)
+            before_test = run(TEST_COMMAND, workspace, env=fixture_env)
             command = expand_command(
                 command_template, workspace, case["prompt"], staged_skill
             )
             agent = run_agent(command, workspace, agent_env)
-            after_test = run(TEST_COMMAND, workspace)
+            after_test = run(TEST_COMMAND, workspace, env=fixture_env)
             status = run(
-                ["git", "status", "--porcelain=v1", "--untracked-files=all"], workspace
+                ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+                workspace,
+                env=fixture_env,
             )
-            diff = run(["git", "diff", "--no-ext-diff"], workspace)
+            diff = run(["git", "diff", "--no-ext-diff"], workspace, env=fixture_env)
             combined_output = f"{agent.stdout}\n{agent.stderr}"
             output_capture = agent_output_capture(agent)
             resource_failure = agent_resource_failure(agent)
@@ -1520,11 +1599,18 @@ def load_agent_env_file(path: Path | None) -> dict[str, str]:
 
     if path is None:
         return {}
+    resolved_path = path.resolve()
+    try:
+        resolved_path.relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        pass
+    else:
+        raise ValueError("agent 环境文件不得位于仓库内或指向仓库内路径")
     values: dict[str, str] = {}
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = resolved_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        raise ValueError(f"无法读取 agent 环境文件: {type(exc).__name__}: {exc}") from exc
+        raise ValueError(f"无法读取 agent 环境文件: {type(exc).__name__}") from exc
     for line_number, line in enumerate(lines, start=1):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):

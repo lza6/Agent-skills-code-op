@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "method": "stdlib-trace-line-audit",
+  "scope": "eval runners exercised by evals/production-delivery-orchestrator/tests",
+  "limitations": "Line audit only; it is not branch coverage and does not prove real Agent CLI behavior.",
+  "targets": [
+    {
+      "path": "evals/production-delivery-orchestrator/run_client_matrix.py",
+      "observed_line_coverage": 0.5657,
+      "minimum_line_coverage": 0.55
+    },
+    {
+      "path": "evals/production-delivery-orchestrator/run_evals.py",
+      "observed_line_coverage": 0.6718,
+      "minimum_line_coverage": 0.65
+    },
+    {
+      "path": "evals/production-delivery-orchestrator/run_forward_tests.py",
+      "observed_line_coverage": 0.6286,
+      "minimum_line_coverage": 0.61
+    }
+  ]
+}

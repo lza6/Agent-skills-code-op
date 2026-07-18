@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import json
 import os
@@ -58,6 +59,35 @@ class ClientMatrixTest(unittest.TestCase):
             self.assertNotIn("--yolo", command)
             self.assertNotIn("--add-dir", command)
             self.assertNotIn("--include-directories", command)
+            self.assertIn("allowed_env_keys", profile)
+            self.assertIn("credential_sets", profile)
+
+        self.assertEqual(
+            profiles["codex-cli"]["credential_sets"], [["OPENAI_API_KEY"]]
+        )
+        self.assertEqual(
+            profiles["codex-cli"]["host_config"],
+            {"env_key": "CODEX_HOME", "default_dir": ".codex"},
+        )
+        self.assertIn("--bare", profiles["claude-code"]["agent_command"])
+        self.assertEqual(
+            profiles["claude-code"]["credential_sets"], [["ANTHROPIC_API_KEY"]]
+        )
+        self.assertEqual(
+            profiles["claude-code"]["host_config"],
+            {"env_key": "CLAUDE_CONFIG_DIR", "default_dir": ".claude"},
+        )
+        self.assertEqual(profiles["claude-code"]["host_config_remove_args"], ["--bare"])
+        self.assertIn(
+            [
+                "GOOGLE_GENAI_USE_VERTEXAI",
+                "GOOGLE_CLOUD_PROJECT",
+                "GOOGLE_CLOUD_LOCATION",
+                "GOOGLE_APPLICATION_CREDENTIALS",
+            ],
+            profiles["gemini-cli"]["credential_sets"],
+        )
+        self.assertIn("--skip-trust", profiles["gemini-cli"]["agent_command"])
 
     def test_rejects_missing_and_unknown_command_placeholders(self) -> None:
         base = {
@@ -70,6 +100,8 @@ class ClientMatrixTest(unittest.TestCase):
                     "executables": {"windows": "synthetic.cmd", "posix": "synthetic"},
                     "probe_args": ["--version"],
                     "configuration": "test only",
+                    "allowed_env_keys": [],
+                    "credential_sets": [],
                     "agent_args": [
                         "{workspace}",
                         "{skill_dir}",
@@ -99,6 +131,8 @@ class ClientMatrixTest(unittest.TestCase):
             "observed_version": "1.2.3",
             "probe_command": [sys.executable, "-c", "print('probe-cli 1.2.3')"],
             "configuration": "test",
+            "allowed_env_keys": [],
+            "credential_sets": [],
             "agent_command": [sys.executable, "{workspace}", "{skill_dir}", "{prompt}"],
         }
         result = MATRIX.probe_profile(profile)
@@ -130,6 +164,8 @@ class ClientMatrixTest(unittest.TestCase):
             "executables": {"windows": "synthetic.cmd", "posix": "synthetic"},
             "probe_args": ["--version"],
             "configuration": "test",
+            "allowed_env_keys": [],
+            "credential_sets": [],
             "agent_args": ["{workspace}", "{skill_dir}", "{prompt}"],
         }
         with mock.patch.object(MATRIX.sys, "platform", "win32"):
@@ -149,6 +185,8 @@ class ClientMatrixTest(unittest.TestCase):
                     "executables": {"windows": sys.executable, "posix": sys.executable},
                     "probe_args": ["--version"],
                     "configuration": "test only",
+                    "allowed_env_keys": [],
+                    "credential_sets": [],
                     "agent_args": ["{workspace}", "{skill_dir}", "{prompt}"],
                 }
             ],
@@ -182,6 +220,227 @@ class ClientMatrixTest(unittest.TestCase):
         self.assertEqual(report["status"], "NOT_RUN")
         self.assertEqual(report["runs"][0]["status"], "NOT_RUN")
         self.assertIn("未确认非隔离宿主执行", report["runs"][0]["message"])
+
+    def test_probe_uses_minimal_environment_without_host_secrets(self) -> None:
+        profile = {
+            "id": "python-cli",
+            "client": "Python",
+            "observed_version": "1.2.3",
+            "probe_command": [sys.executable, "-c", "print('probe-cli 1.2.3')"],
+        }
+        completed = subprocess.CompletedProcess(profile["probe_command"], 0, "probe-cli 1.2.3\n", "")
+        with tempfile.TemporaryDirectory(prefix="pdo-probe-env-") as temp:
+            with mock.patch.dict(
+                os.environ,
+                {"PATH": os.environ.get("PATH", ""), "HOST_PROBE_SECRET": "secret"},
+                clear=True,
+            ):
+                with mock.patch.object(
+                    MATRIX.HARNESS, "run_bounded_process", return_value=completed
+                ) as bounded:
+                    result = MATRIX.probe_profile(profile, Path(temp))
+
+        self.assertEqual(result["status"], "AVAILABLE")
+        environment = bounded.call_args.kwargs["env"]
+        self.assertNotIn("HOST_PROBE_SECRET", environment)
+        self.assertIn("HOME", environment)
+        self.assertIn("CODEX_HOME", environment)
+        self.assertIn("CLAUDE_CONFIG_DIR", environment)
+
+    def test_profile_environment_filters_credentials_and_reports_missing_set(self) -> None:
+        profile = {
+            "id": "claude-code",
+            "allowed_env_keys": ["ANTHROPIC_API_KEY"],
+            "credential_sets": [["ANTHROPIC_API_KEY"]],
+        }
+        filtered, credential_ready = MATRIX.filter_profile_agent_env(
+            profile,
+            {
+                "ANTHROPIC_API_KEY": "anthropic-secret",
+                "GEMINI_API_KEY": "gemini-secret",
+            },
+        )
+        self.assertEqual(filtered, {"ANTHROPIC_API_KEY": "anthropic-secret"})
+        self.assertTrue(credential_ready)
+
+        filtered, credential_ready = MATRIX.filter_profile_agent_env(
+            profile, {"GEMINI_API_KEY": "gemini-secret"}
+        )
+        self.assertEqual(filtered, {})
+        self.assertFalse(credential_ready)
+
+    def test_host_client_config_resolution_exposes_only_supported_existing_root(self) -> None:
+        profile = {
+            "host_config": {"env_key": "CODEX_HOME", "default_dir": ".codex"}
+        }
+        with tempfile.TemporaryDirectory(prefix="pdo-host-config-") as temp:
+            config_root = Path(temp) / ".codex"
+            config_root.mkdir()
+            with mock.patch.dict(
+                os.environ,
+                {"CODEX_HOME": str(config_root), "HOST_SECRET": "secret"},
+                clear=True,
+            ):
+                resolved = MATRIX.resolve_host_client_config(profile)
+
+        self.assertEqual(resolved, {"CODEX_HOME": str(config_root.resolve())})
+        self.assertNotIn("HOST_SECRET", resolved or {})
+        self.assertIsNone(MATRIX.resolve_host_client_config({"host_config": None}))
+
+    def test_host_client_config_requires_all_execution_opt_ins(self) -> None:
+        args = argparse.Namespace(
+            profiles=PROFILE_PATH,
+            clients=None,
+            output_dir=Path(tempfile.gettempdir()),
+            report_prefix="matrix",
+            execute=False,
+            allow_unsafe_host_execution=False,
+            allow_host_client_config=True,
+            allow_host_network_configuration=False,
+            agent_env_file=None,
+        )
+        with mock.patch.object(MATRIX, "parse_args", return_value=args):
+            with mock.patch.object(MATRIX, "load_profiles", return_value={}):
+                self.assertEqual(MATRIX.main(), 1)
+
+    def test_host_network_configuration_requires_all_execution_opt_ins(self) -> None:
+        args = argparse.Namespace(
+            profiles=PROFILE_PATH,
+            clients=None,
+            output_dir=Path(tempfile.gettempdir()),
+            report_prefix="matrix",
+            execute=False,
+            allow_unsafe_host_execution=False,
+            allow_host_client_config=False,
+            allow_host_network_configuration=True,
+            agent_env_file=None,
+        )
+        with mock.patch.object(MATRIX, "parse_args", return_value=args):
+            with mock.patch.object(MATRIX, "load_profiles", return_value={}):
+                self.assertEqual(MATRIX.main(), 1)
+
+    def test_host_network_configuration_reads_only_proxy_keys(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "HTTPS_PROXY": "https://proxy.invalid",
+                "NO_PROXY": "localhost",
+                "HOST_SECRET": "secret",
+            },
+            clear=True,
+        ):
+            resolved = MATRIX.resolve_host_network_environment()
+        self.assertEqual(
+            resolved,
+            {"HTTPS_PROXY": "https://proxy.invalid", "NO_PROXY": "localhost"},
+        )
+        self.assertNotIn("HOST_SECRET", resolved)
+
+    def test_host_client_config_is_an_explicit_authentication_source(self) -> None:
+        profile = {
+            "id": "claude-code",
+            "client": "Claude Code",
+            "observed_version": "2.1.212",
+            "configuration": "test",
+            "agent_command": ["claude", "--bare", "{workspace}", "{skill_dir}", "{prompt}"],
+            "allowed_env_keys": ["ANTHROPIC_API_KEY"],
+            "credential_sets": [["ANTHROPIC_API_KEY"]],
+            "host_config": {"env_key": "CLAUDE_CONFIG_DIR", "default_dir": ".claude"},
+            "host_config_remove_args": ["--bare"],
+        }
+        with tempfile.TemporaryDirectory(prefix="pdo-host-auth-") as temp:
+            args = argparse.Namespace(
+                profiles=PROFILE_PATH,
+                clients=None,
+                output_dir=Path(temp),
+                report_prefix="matrix",
+                execute=True,
+                allow_unsafe_host_execution=True,
+                allow_host_client_config=True,
+                allow_host_network_configuration=False,
+                agent_env_file=None,
+            )
+            report_box: dict[str, object] = {}
+            with mock.patch.object(MATRIX, "parse_args", return_value=args):
+                with mock.patch.object(MATRIX, "load_profiles", return_value={profile["id"]: profile}):
+                    with mock.patch.object(
+                        MATRIX,
+                        "probe_profile",
+                        return_value={"id": profile["id"], "status": "AVAILABLE"},
+                    ):
+                        with mock.patch.object(MATRIX.HARNESS, "load_agent_env_file", return_value={}):
+                            with mock.patch.object(
+                                MATRIX,
+                                "resolve_host_client_config",
+                                return_value={"CLAUDE_CONFIG_DIR": "external-host-config"},
+                            ):
+                                with mock.patch.object(
+                                    MATRIX,
+                                    "execute_profile",
+                                    return_value={"id": profile["id"], "status": "PASS"},
+                                ) as execute:
+                                    with mock.patch.object(
+                                        MATRIX,
+                                        "write_report",
+                                        side_effect=lambda report, *_: report_box.update(report),
+                                    ):
+                                        with mock.patch.object(
+                                            MATRIX.HARNESS,
+                                            "skill_artifact_sha256",
+                                            return_value="a" * 64,
+                                        ):
+                                            self.assertEqual(MATRIX.main(), 0)
+
+        self.assertEqual(
+            execute.call_args.args[3], {"CLAUDE_CONFIG_DIR": "external-host-config"}
+        )
+        self.assertEqual(execute.call_args.args[4], "host_config")
+        self.assertNotIn("--bare", execute.call_args.args[0]["agent_command"])
+        self.assertEqual(report_box["runs"][0]["authentication_source"], "host_config")
+        self.assertEqual(report_box["runs"][0]["network_configuration_source"], "isolated")
+
+    def test_missing_required_profile_credentials_is_not_run_without_agent_start(self) -> None:
+        profile = {
+            "id": "claude-code",
+            "client": "Claude Code",
+            "observed_version": "2.1.212",
+            "configuration": "test",
+            "agent_command": ["claude", "--bare", "{workspace}", "{skill_dir}", "{prompt}"],
+            "allowed_env_keys": ["ANTHROPIC_API_KEY"],
+            "credential_sets": [["ANTHROPIC_API_KEY"]],
+        }
+        with tempfile.TemporaryDirectory(prefix="pdo-missing-credential-") as temp:
+            args = argparse.Namespace(
+                profiles=PROFILE_PATH,
+                clients=None,
+                output_dir=Path(temp),
+                report_prefix="matrix",
+                execute=True,
+                allow_unsafe_host_execution=True,
+                allow_host_client_config=False,
+                allow_host_network_configuration=False,
+                agent_env_file=Path(temp) / "outside.env",
+            )
+            report_box: dict[str, object] = {}
+            with mock.patch.object(MATRIX, "parse_args", return_value=args):
+                with mock.patch.object(MATRIX, "load_profiles", return_value={profile["id"]: profile}):
+                    with mock.patch.object(
+                        MATRIX,
+                        "probe_profile",
+                        return_value={"id": profile["id"], "status": "AVAILABLE"},
+                    ):
+                        with mock.patch.object(MATRIX.HARNESS, "load_agent_env_file", return_value={}):
+                            with mock.patch.object(MATRIX, "execute_profile") as execute:
+                                with mock.patch.object(
+                                    MATRIX, "write_report", side_effect=lambda report, *_: report_box.update(report)
+                                ):
+                                    with mock.patch.object(MATRIX.HARNESS, "skill_artifact_sha256", return_value="a" * 64):
+                                        self.assertEqual(MATRIX.main(), 1)
+
+        execute.assert_not_called()
+        run = report_box["runs"][0]
+        self.assertEqual(run["status"], "NOT_RUN")
+        self.assertIn("认证", run["message"])
 
     def test_matrix_report_marks_probe_only_as_not_run(self) -> None:
         report = {

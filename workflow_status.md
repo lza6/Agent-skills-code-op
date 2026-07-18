@@ -1,5 +1,21 @@
 # Workflow Status
 
+## 当前持续治理与隔离 CLI 验收（2026-07-18，基线 `290bdc4`）
+
+- 目标：把对标路线图中仍未关闭的“当前事实、可重建 registry/inventory、全仓凭证扫描、coverage 审计、真实 CLI 显式认证”落地为可复跑门；不重写 `v1.6.0` tag 或把无凭证预检描述成 Agent 行为。
+- 授权：用户已授权本地修改、测试、真实 CLI、commit/push 与后续发布；凭证本身未在工作区、环境变量或用户输入中提供，绝不编造、搜索或持久化。
+
+| ID | 节点 | 状态 | 验收与当前证据 |
+|---|---|---|---|
+| G1 | fixture/CLI 隔离与认证契约 | passed | fixture Git/test/diff、probe 与 Agent 使用最小环境；repo 内 env-file、受控路径和高风险 runtime 变量均拒绝；matrix 按 profile 过滤凭证。默认认证为仓库外 env-file；Codex/Claude 另有三重显式 opt-in 的 host-config 路径，只暴露各自配置根目录、不复制凭证，Claude host 分支仅移除排斥 OAuth 的 `--bare`；本机代理另需第四个显式 opt-in，值脱敏；Gemini fixture 显式 `--skip-trust`。本轮 eval/forward/matrix 全套 `60`（2 Linux skip）通过。 |
+| G2 | 三客户端真实预检 | partial | Codex `0.144.5` 新 hardened runner 三例 PASS，artifact SHA 执行前后相同且输出完整。Claude `2.1.212` 经 host-config 和独立 host-proxy opt-in 真实执行，但本机 OAuth 配置/账户均没有可用模型（`grok-4.5` 与 `sonnet` 都被拒绝），三例 FAIL 且 fixture/skill 未改；用户级模型配置已还原。Gemini `0.51.0` probe AVAILABLE，未提供 API/Vertex 凭证，未启动 Agent。默认 env-file 路径中无认证变量时三者均即时 `NOT_RUN`。 |
+| G3 | 当前事实一致性 | passed | `docs/current-state.md` 是唯一入口；metadata/README/release note/status 当前段以 stdlib `5/5` 交叉检查，历史段不参与。 |
+| G4 | registry 与供应链 inventory | passed | `skills/registry.json` 可重建、schema=1、当前单技能可查询；`docs/dependency-inventory.json` 声明 stdlib-only、无 manifest/lockfile 并列出锁定 Actions SHA；定向 `5/5 + 3/3` 通过。 |
+| G5 | 可复跑 coverage 与全仓凭证扫描 | passed | Linux CI 将用 stdlib `trace` 对三个 eval runner 执行版本化 line baseline（matrix `56.57%`、eval `67.18%`、forward `62.86%`，minimum 为 `55%/65%/61%`）；全仓 tracked UTF-8 扫描已启用，仅两份明确构造 token pattern 的测试夹具豁免。 |
+| G6 | 独立六维 Critic | pending | 检查本轮 runner、当前状态、registry/inventory、coverage、CLI 预检和实际回归证据；Critic 不得修改文件。 |
+
+- 真实多 CLI 的停止条件：默认路径是将短期凭证放在**仓库外**的 env 文件并显式传入 `--agent-env-file` 后，Codex 使用 `OPENAI_API_KEY`、Claude 使用 `ANTHROPIC_API_KEY`、Gemini 使用 `GEMINI_API_KEY`/`GOOGLE_API_KEY` 或完整 Vertex 集。已登录 Codex/Claude 也可以显式传入 `--execute --allow-unsafe-host-execution --allow-host-client-config`，仍只允许对应 CLI 配置根；Gemini 不提供 host-config fallback。只有每个启用 profile 的三例均通过，G2 才能从 `partial` 改为 `passed`。
+
 ## 当前 v1.6.0 发布闭环（2026-07-18）
 
 - 目标：将 P0/P1 加固作为 `v1.6.0` 版本提交、推送、annotated tag 和 GitHub Release 发布；以新鲜远端 CI、下载制品/provenance/attestation、tagged 发现和真实 Agent CLI 样本完成最终闭环。
@@ -53,7 +69,7 @@
 
 - 本轮结论：B1–B6 已完成，当前分析/状态文档获独立六维 Critic PASS。下一节点不是自动编码，而是等待用户选择 P0，或 P0+P1 的代码改造授权；Release、推送、tag 和外部真实 Agent 执行仍须另行授权。
 
-> **历史分界。** 以下所有 release 契约、节点、验证台账和“当前”措辞均是产生当日的历史记录，不是本轮 current-state；本轮唯一 current-state 以本文件顶部 B1–B6 看板和 `docs/project-benchmark-revalidation-2026-07-18.md` 为准。
+> **历史分界。** 以下所有 release 契约、节点、验证台账和“当前”措辞均是产生当日的历史记录，不是现在的 current-state；唯一当前入口为 `docs/current-state.md`，状态机以本文件顶部的 G1–G6 与 v1.6.0 R1–R5 看板为准。
 
 ## 当前证据完成门与最小实验发布契约（2026-07-18，目标 v1.5.0）
 

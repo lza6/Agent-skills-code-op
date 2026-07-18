@@ -3,3 +3,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 dist/
+.trace-coverage/
+.trace-coverage-review/
+.evidence/
+.release-candidate/

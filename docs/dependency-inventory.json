@@ -1,0 +1,45 @@
+{
+  "dependency_manifests": [],
+  "github_actions": [
+    {
+      "action": "actions/attest-build-provenance",
+      "sha": "977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+      "workflow": ".github/workflows/release.yml"
+    },
+    {
+      "action": "actions/checkout",
+      "sha": "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+      "workflow": ".github/workflows/release.yml"
+    },
+    {
+      "action": "actions/checkout",
+      "sha": "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+      "workflow": ".github/workflows/release.yml"
+    },
+    {
+      "action": "actions/setup-python",
+      "sha": "ece7cb06caefa5fff74198d8649806c4678c61a1",
+      "workflow": ".github/workflows/release.yml"
+    },
+    {
+      "action": "actions/setup-python",
+      "sha": "ece7cb06caefa5fff74198d8649806c4678c61a1",
+      "workflow": ".github/workflows/release.yml"
+    },
+    {
+      "action": "actions/checkout",
+      "sha": "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+      "workflow": ".github/workflows/skill-evals.yml"
+    },
+    {
+      "action": "actions/setup-python",
+      "sha": "ece7cb06caefa5fff74198d8649806c4678c61a1",
+      "workflow": ".github/workflows/skill-evals.yml"
+    }
+  ],
+  "python": {
+    "runtime": "stdlib-only",
+    "third_party_dependencies": "none"
+  },
+  "schema": 1
+}

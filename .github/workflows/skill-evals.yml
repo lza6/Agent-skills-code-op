@@ -49,8 +49,18 @@ jobs:
         run: >-
           python -m unittest discover
           -s .github/workflows/tests
-          -p "test_*.py"
+          -p test_*.py
           -v
+
+      - name: Verify generated registry and dependency inventory
+        run: >-
+          python tools/build_skill_registry.py --check &&
+          python tools/generate_dependency_inventory.py --check
+
+      - name: Run registry and tooling audit tests
+        run: >-
+          python -m unittest discover -s skills/tests -p test_*.py -v &&
+          python -m unittest discover -s tools/tests -p test_*.py -v
 
       - name: Build and verify release artifacts from metadata
         run: >-
@@ -58,7 +68,7 @@ jobs:
           python release/build_release.py --output-dir .release-artifacts --verify
 
       - name: Run release builder tests
-        run: python -m unittest discover -s release/tests -p "test_*.py" -v
+        run: python -m unittest discover -s release/tests -p test_*.py -v
 
       - name: Run evaluation self-test
         run: python evals/production-delivery-orchestrator/run_evals.py --self-test
@@ -76,8 +86,19 @@ jobs:
         run: >-
           python -m unittest discover
           -s evals/production-delivery-orchestrator/tests
-          -p "test_*.py"
+          -p test_*.py
           -v
+
+      - name: Check stdlib trace line-coverage baseline
+        if: runner.os == 'Linux'
+        run: >-
+          python -m trace --count --coverdir .trace-coverage --module unittest discover
+          -s evals/production-delivery-orchestrator/tests -p test_*.py -q &&
+          python tools/trace_coverage_baseline.py --trace-dir .trace-coverage
+          --source evals/production-delivery-orchestrator/run_client_matrix.py
+          --source evals/production-delivery-orchestrator/run_evals.py
+          --source evals/production-delivery-orchestrator/run_forward_tests.py
+          --output .trace-coverage/report.json --baseline docs/coverage-baseline.json --check
 
       - name: Confirm known-bad candidate is rejected
         run: >-
@@ -93,7 +114,7 @@ jobs:
         run: >-
           python -m unittest discover
           -s skills/production-delivery-orchestrator/tests
-          -p "test_*.py"
+          -p test_*.py
           -v
 
       - name: Check whitespace errors in changed event range

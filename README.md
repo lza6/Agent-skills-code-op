@@ -8,6 +8,7 @@
 
 ## 项目分析与审计证据
 
+- [当前项目事实（稳定发布、供应链证明与真实 CLI 状态）](docs/current-state.md)
 - [2026-07-18 P0/P1 实施闭环与验证证据](docs/implementation-closure-2026-07-18.md)
 - [2026-07-18 当前项目识别、参考对标与改造路线图](docs/project-benchmark-revalidation-2026-07-18.md)
 - [项目识别、差距、迁移与 1–9 实施报告](docs/project-benchmark-analysis.md)
@@ -473,9 +474,9 @@ python evals\production-delivery-orchestrator\run_forward_tests.py --self-test
 python evals\production-delivery-orchestrator\run_client_matrix.py
 ```
 
-`--self-test` 只使用本地合成 helper 验证 harness，不是模型行为证据。`run_client_matrix.py` 默认也只探测本机客户端，不会调用模型，结果必为 `NOT_RUN`。当前注册表包含基于本机 `--help` 核对的 Codex CLI、Claude Code 和 Gemini CLI 命令模板；Windows 使用 `.cmd`，Linux/macOS 使用无后缀命令。若探测版本与 registry 记录不一致，矩阵会标记 `VERSION_MISMATCH` 并拒绝发起真实样本，先更新并复测该命令模板。
+`--self-test` 只使用本地合成 helper 验证 harness，不是模型行为证据。`run_client_matrix.py` 默认也只探测本机客户端，不会调用模型，结果必为 `NOT_RUN`。当前 CLI profile 配置包含基于本机 `--help` 核对的 Codex CLI、Claude Code 和 Gemini CLI 命令模板；Windows 使用 `.cmd`，Linux/macOS 使用无后缀命令。若探测版本与 profile 记录不一致，矩阵会标记 `VERSION_MISMATCH` 并拒绝发起真实样本，先更新并复测该命令模板。独立的 [技能 registry](skills/registry.json) 由 `tools/build_skill_registry.py` 重建，当前有一个可选择的技能条目，并为未来多技能发现保留稳定 schema。
 
-要真实采集某个客户端的新证据，必须显式执行 `--execute --allow-unsafe-host-execution`。第二个开关故意使用危险名称：runner 会使用临时 fixture、临时 HOME、最小子进程环境和临时技能副本，但它**不能**把 Claude Code 或 Gemini CLI 变成 OS/容器沙箱。生产样本应在你控制的 VM、容器或专用测试账号中运行。这可能消耗订阅额度或 API 配额：
+要真实采集某个客户端的新证据，必须显式执行 `--execute --allow-unsafe-host-execution`。第二个开关故意使用危险名称：runner 会使用临时 fixture、临时 HOME、最小子进程环境和临时技能副本，但它**不能**把 Claude Code 或 Gemini CLI 变成 OS/容器沙箱。默认认证只接受仓库外 `--agent-env-file`。已登录的 Codex/Claude 另需 `--allow-host-client-config` 才可只暴露对应配置根；需要宿主 HTTP(S) 代理时还需单独 `--allow-host-network-configuration`，代理值会脱敏且不会写入报告。生产样本应在你控制的 VM、容器或专用测试账号中运行。这可能消耗订阅额度或 API 配额：
 
 ```powershell
 python evals\production-delivery-orchestrator\run_client_matrix.py `

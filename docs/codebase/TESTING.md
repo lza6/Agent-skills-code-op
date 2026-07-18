@@ -60,8 +60,8 @@ python evals/production-delivery-orchestrator/run_client_matrix.py
 - forward 的进程树和输出上限仅使用安全本地 Python stub 验收；self-test 仍是 synthetic，不是实际 Agent/多客户端行为结论。
 - `release/build_release.py --verify`、Python compile 和 `git diff --check` 均通过。细节及外部发布门见 `docs/implementation-closure-2026-07-18.md`。
 
-- Coverage tool + threshold: 仓库未配置 coverage 工具或门槛；历史 N13 曾只使用环境中已有的 `coverage.py` 做临时诊断，没有把它新增为项目依赖。
-- Current reported coverage: 官方/版本化覆盖率仍为 N/A。历史 N13 对 `run_evals.py` 与旧版 `run_forward_tests.py` 的 23 个单元测试执行 branch coverage，合计 `82%`；该诊断不覆盖本版本新增 matrix runner，也不等价于整个仓库覆盖率。
+- Coverage audit: 版本化 [stdlib trace line baseline](../coverage-baseline.json) 只审计 eval runners 的非空非注释源码行；它不引入第三方依赖，也不宣称 branch coverage 或真实 Agent 行为。CI 在 Linux 上重新采样并拒绝低于文件中 minimum 的结果。
+- Current reported coverage: 该 baseline 的首次观测为 matrix `56.57%`、eval `67.18%`、forward `62.86%`；门槛为相应的 `55%`、`65%`、`61%`。历史 N13 的 `82%` 仍只是旧版两个 runner 的临时 branch coverage 诊断，不能与本审计口径混用。
 - Historical N13 local audit result（2026-07-17, Asia/Shanghai；不是当前复核）:
   - Python syntax: PASS
   - Installer integration: `11/11` PASS

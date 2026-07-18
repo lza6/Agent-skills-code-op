@@ -413,6 +413,37 @@ class ForwardTestHarnessTest(unittest.TestCase):
         self.assertNotIn(opaque_secret, rendered)
         self.assertIn(HARNESS.REDACTED, rendered)
 
+    def test_fixture_git_test_and_diff_commands_use_a_minimal_environment(self) -> None:
+        host_secret = "host-fixture-secret"
+        with tempfile.TemporaryDirectory(prefix="pdo-fixture-env-") as temp:
+            workspace = Path(temp) / "repo"
+            with mock.patch.dict(
+                os.environ,
+                {"PATH": os.environ.get("PATH", ""), "HOST_SECRET": host_secret},
+                clear=True,
+            ):
+                with mock.patch.object(
+                    HARNESS,
+                    "run",
+                    return_value=subprocess.CompletedProcess([], 0, "", ""),
+                ) as run:
+                    with mock.patch.object(
+                        HARNESS,
+                        "run_agent",
+                        return_value=subprocess.CompletedProcess([], 0, "", ""),
+                    ):
+                        HARNESS.init_fixture(workspace)
+                        HARNESS.evaluate_case(HARNESS.CASES[0], ["safe-stub"])
+
+        self.assertGreaterEqual(len(run.call_args_list), 10)
+        for call in run.call_args_list:
+            environment = call.kwargs["env"]
+            self.assertNotIn("HOST_SECRET", environment)
+            self.assertIn("HOME", environment)
+            self.assertIn("TMP", environment)
+            self.assertIn("CODEX_HOME", environment)
+            self.assertIn("CLAUDE_CONFIG_DIR", environment)
+
     def test_explicit_agent_environment_file_cannot_override_controlled_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-agent-env-file-") as temp:
             env_file = Path(temp) / "agent.env"
@@ -422,6 +453,25 @@ class ForwardTestHarnessTest(unittest.TestCase):
             )
             env_file.write_text("HOME=C:/host\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "受控变量"):
+                HARNESS.load_agent_env_file(env_file)
+
+            for key in ("CODEX_HOME", "CLAUDE_CONFIG_DIR", "PYTHONPATH", "NODE_OPTIONS"):
+                with self.subTest(key=key):
+                    env_file.write_text(f"{key}=host-controlled\n", encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, "受控变量"):
+                        HARNESS.load_agent_env_file(env_file)
+
+        with self.assertRaisesRegex(ValueError, "仓库内"):
+            HARNESS.load_agent_env_file(HARNESS.EVAL_DIR / "client-profiles.json")
+
+    def test_env_file_symlink_resolved_into_repository_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-agent-env-link-") as temp:
+            env_file = Path(temp) / "linked.env"
+            try:
+                env_file.symlink_to(HARNESS.EVAL_DIR / "client-profiles.json")
+            except OSError as exc:
+                self.skipTest(f"当前平台不允许创建测试符号链接: {exc}")
+            with self.assertRaisesRegex(ValueError, "仓库内"):
                 HARNESS.load_agent_env_file(env_file)
 
     def test_real_agent_command_requires_explicit_unsafe_host_opt_in(self) -> None:
@@ -721,6 +771,33 @@ class ForwardTestHarnessTest(unittest.TestCase):
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(result["error"]["kind"], "infrastructure_error")
         self.assertNotIn(infrastructure_secret, json.dumps(result, ensure_ascii=False))
+
+    @unittest.skipUnless(os.name == "nt", "Windows Job Object behavior")
+    def test_windows_wrapper_child_can_finish_inside_the_job(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-wrapper-child-") as temp:
+            root = Path(temp)
+            parent = root / "wrapper.py"
+            parent.write_text(
+                """import subprocess
+import sys
+subprocess.Popen([
+    sys.executable,
+    '-c',
+    \"import time; time.sleep(3); print('wrapper-child-complete')\",
+])
+""",
+                encoding="utf-8",
+            )
+            result = HARNESS.run_bounded_process(
+                [sys.executable, str(parent)],
+                root,
+                timeout=8,
+                allow_windows_launcher_child=True,
+            )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("wrapper-child-complete", result.stdout)
+        self.assertIsNone(HARNESS.agent_resource_failure(result))
 
     def test_self_test_is_explicitly_synthetic(self) -> None:
         output = io.StringIO()
