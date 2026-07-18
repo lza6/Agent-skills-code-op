@@ -1,5 +1,9 @@
 # 独立 Critic 六维审查与复验
 
+> **历史归档：本文件不是当前发布状态，也不批准后续增量。** 它记录 v1.0.0/v1.0.1
+> 与 N12 时段的原始 Critic 证据；当前稳定发布、真实 CLI 状态和未关闭项只以
+> [`docs/current-state.md`](../docs/current-state.md) 与 `workflow_status.md` 顶部看板为准。
+
 ## 已发布闭环与当前增量状态
 
 - 独立审查者：`/root/final_critic_completion_audit`

@@ -736,7 +736,22 @@ def resolve_install_plan(
     return destinations, tuple((*selected_bridges, *custom_bridges))
 
 
+def configure_console_utf8() -> None:
+    """Prefer readable UTF-8 diagnostics without requiring configurable streams."""
+
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, OSError, TypeError, ValueError):
+            # Embedded or already-detached streams can reject reconfiguration.
+            continue
+
+
 def main() -> int:
+    configure_console_utf8()
     args = parse_args()
     project_dir = args.project_dir.expanduser().resolve()
     destinations, bridge_paths = resolve_install_plan(args, project_dir)

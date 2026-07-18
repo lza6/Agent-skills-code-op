@@ -123,6 +123,14 @@
       "patterns": ["L1", "L2", "L3", "完成门", "新鲜证据", "不要求.*全仓库|低风险.*L1", "失效", "未执行.*不等于通过"]
     },
     {
+      "id": "maintenance-freshness-before-coding",
+      "title": "长期维护先核验规则、文档和当前事实，再进入实现",
+      "weight": 6,
+      "critical": true,
+      "kind": "capability",
+      "patterns": ["维护.*终局审计|终局审计.*维护|恢复既有工作流", "先读后改", "git status --short", "文档事实新鲜度", "fresh.*stale.*partial.*not_applicable", "不得把历史结果.*静态评测.*mock.*当前运行证据", "独立只读 Critic"]
+    },
+    {
       "id": "single-hypothesis-minimal-experiment",
       "title": "根因未知时保留候选与反证，并用单一假设的最小实验收敛",
       "weight": 8,

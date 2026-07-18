@@ -12,9 +12,16 @@ METADATA_PATH = REPO_ROOT / "release" / "metadata.json"
 RELEASE_NOTE_PATH = REPO_ROOT / "docs" / "releases" / "v1.7.0.md"
 WORKFLOW_STATUS_PATH = REPO_ROOT / "workflow_status.md"
 CURRENT_STATE_PATH = REPO_ROOT / "docs" / "current-state.md"
+CONCERNS_PATH = REPO_ROOT / "docs" / "codebase" / "CONCERNS.md"
+HISTORICAL_REVIEW_PATH = REPO_ROOT / "reviews" / "final-critic.md"
+SUPPORT_MATRIX_PATH = REPO_ROOT / "docs" / "support-matrix.json"
 
 STABLE_TAG = "v1.7.0"
 RELEASE_COMMIT = "80b416ecd73d953dc0ead66c9996b142d21a7ecd"
+CURRENT_TRANSACTION_FACT = "多目标安装已使用可补偿的跨目标事务"
+STALE_TRANSACTION_CONTRADICTION = "多目标安装不提供跨目标全局事务"
+CURRENT_SUPPORT_MATRIX_FACT = "支持矩阵已机器可读"
+STALE_SUPPORT_MATRIX_CONTRADICTION = "支持版本没有机器可读声明"
 MAIN_ACTION_RUN = "29639353470"
 TAG_ACTION_RUN = "29639416337"
 RELEASE_ASSET_SHA256 = "199f9fc66dd8739238c100588b3a1616838597ae5bd7cb0f41b724da6bf17c99"
@@ -43,6 +50,17 @@ class CurrentStateConsistencyTest(unittest.TestCase):
             "当前 v1.7.0 发布闭环",
         )
         self.current_state = CURRENT_STATE_PATH.read_text(encoding="utf-8")
+        self.concerns = CONCERNS_PATH.read_text(encoding="utf-8")
+        self.historical_review = HISTORICAL_REVIEW_PATH.read_text(encoding="utf-8")
+
+    def assert_current_transaction_fact(self, concerns: str) -> None:
+        self.assertIn(CURRENT_TRANSACTION_FACT, concerns)
+        self.assertNotIn(STALE_TRANSACTION_CONTRADICTION, concerns)
+
+    def assert_current_support_matrix_fact(self, concerns: str) -> None:
+        self.assertIn(CURRENT_SUPPORT_MATRIX_FACT, concerns)
+        self.assertNotIn(STALE_SUPPORT_MATRIX_CONTRADICTION, concerns)
+        self.assertNotIn("保持 `v1.0.1` 稳定", concerns)
 
     def test_metadata_readme_and_current_page_use_the_stable_tag(self) -> None:
         self.assertEqual(self.metadata["version"], "1.7.0")
@@ -134,6 +152,37 @@ class CurrentStateConsistencyTest(unittest.TestCase):
         )
         self.assertIn("不把 `main` HEAD 视为固定发布事实", self.current_state)
         self.assertIn("历史审计和历史 release 说明不是本页的 current-state", self.current_state)
+
+    def test_codebase_concerns_and_critic_archive_do_not_invert_current_facts(self) -> None:
+        self.assert_current_transaction_fact(self.concerns)
+        self.assert_current_support_matrix_fact(self.concerns)
+        self.assertIn("历史归档：本文件不是当前发布状态", self.historical_review)
+        self.assertIn("docs/current-state.md", self.historical_review)
+
+    def test_transaction_contradiction_is_rejected_even_with_the_correct_fact_present(self) -> None:
+        with self.assertRaises(AssertionError):
+            self.assert_current_transaction_fact(
+                f"{CURRENT_TRANSACTION_FACT}\n{STALE_TRANSACTION_CONTRADICTION}"
+            )
+
+    def test_support_matrix_contradiction_is_rejected_even_with_the_current_fact_present(self) -> None:
+        with self.assertRaises(AssertionError):
+            self.assert_current_support_matrix_fact(
+                f"{CURRENT_SUPPORT_MATRIX_FACT}\n{STALE_SUPPORT_MATRIX_CONTRADICTION}"
+            )
+
+    def test_support_matrix_declares_tested_runtime_and_eval_history_boundary(self) -> None:
+        support_matrix = json.loads(SUPPORT_MATRIX_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(support_matrix["schema"], 1)
+        self.assertEqual(support_matrix["runtime"]["python"]["tested_versions"], ["3.11"])
+        self.assertEqual(
+            support_matrix["evaluation"]["default_git_baseline"]["ref"],
+            "b3d9a17",
+        )
+        self.assertTrue(
+            support_matrix["evaluation"]["default_git_baseline"]["requires_full_history"]
+        )
+        self.assertIn("docs/support-matrix.json", self.readme)
 
 
 if __name__ == "__main__":

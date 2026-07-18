@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 EVAL_DIR = Path(__file__).resolve().parents[1]
@@ -42,6 +43,60 @@ class PortableReportPathTest(unittest.TestCase):
             with self.subTest(unsafe=unsafe):
                 with self.assertRaisesRegex(ValueError, "report-prefix"):
                     RUNNER.validate_report_prefix(unsafe)
+
+    def test_default_git_baseline_preflight_explains_missing_history(self) -> None:
+        with mock.patch.object(
+            RUNNER, "run_git", side_effect=ValueError("unknown revision")
+        ):
+            with self.assertRaisesRegex(
+                ValueError, "shallow clone.*--baseline"
+            ):
+                RUNNER.preflight_default_git_baseline(
+                    RUNNER.DEFAULT_BASELINE_GIT_REF,
+                    RUNNER.DEFAULT_SKILL_RELATIVE_PATH,
+                )
+
+    def test_explicit_baseline_bypasses_default_git_history_preflight(self) -> None:
+        with mock.patch.object(RUNNER, "run_git") as run_git:
+            report, exit_code = RUNNER.run_evaluation(
+                self.evaluation_args(baseline=RUNNER.DEFAULT_CANDIDATE)
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(report["baseline"]["artifact"]["source"], "skills/production-delivery-orchestrator")
+        self.assertEqual(report["metadata"]["baseline_git_ref"], None)
+        run_git.assert_not_called()
+
+    def test_cli_reports_actionable_error_without_git_history(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-source-archive-") as temp:
+            archive_root = Path(temp) / "source-archive"
+            shutil.copytree(
+                RUNNER.REPO_ROOT,
+                archive_root,
+                ignore=shutil.ignore_patterns(".git", "__pycache__", "*.pyc"),
+            )
+            archive_runner = (
+                archive_root / "evals" / "production-delivery-orchestrator" / "run_evals.py"
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(archive_runner),
+                    "--output-dir",
+                    str(archive_root / "reports"),
+                ],
+                cwd=archive_root,
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env={**os.environ, "PYTHONUTF8": "1"},
+            )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("默认 Git baseline", result.stderr)
+        self.assertIn("shallow clone", result.stderr)
+        self.assertIn("--baseline", result.stderr)
 
     def test_repo_paths_use_posix_relative_display_on_windows_and_unix(self) -> None:
         cases = (
@@ -276,6 +331,31 @@ class PortableReportPathTest(unittest.TestCase):
             shutil.copytree(RUNNER.DEFAULT_CANDIDATE, candidate)
             contract = candidate / "references" / "validation-contract.md"
             contract.write_text("只要求运行全部测试后宣布完成。\n", encoding="utf-8")
+            weakened = RUNNER.load_artifact(candidate, "weakened")
+            self.assertFalse(
+                RUNNER.evaluate_check(weakened, check, fixture, rubric).passed
+            )
+
+    def test_maintenance_contract_is_routed_and_detects_missing_freshness_gate(
+        self,
+    ) -> None:
+        rubric = RUNNER.load_json_yaml(EVAL_DIR / "rubric.yaml")
+        check = next(
+            item
+            for item in rubric["checks"]
+            if item["id"] == "maintenance-freshness-before-coding"
+        )
+        fixture = RUNNER.analyze_fixture(RUNNER.DEFAULT_FIXTURE)
+        current = RUNNER.load_artifact(RUNNER.DEFAULT_CANDIDATE, "current")
+        self.assertTrue(
+            RUNNER.evaluate_check(current, check, fixture, rubric).passed
+        )
+
+        with tempfile.TemporaryDirectory(prefix="pdo-maintenance-contract-") as temp:
+            candidate = Path(temp) / "candidate"
+            shutil.copytree(RUNNER.DEFAULT_CANDIDATE, candidate)
+            contract = candidate / "references" / "maintenance-contract.md"
+            contract.write_text("直接开始修改，不需要检查旧文档。\n", encoding="utf-8")
             weakened = RUNNER.load_artifact(candidate, "weakened")
             self.assertFalse(
                 RUNNER.evaluate_check(weakened, check, fixture, rubric).passed

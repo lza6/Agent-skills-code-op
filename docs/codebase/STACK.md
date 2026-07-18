@@ -46,7 +46,7 @@ python evals/production-delivery-orchestrator/run_forward_tests.py --verify-reco
 git diff --check
 ```
 
-默认 `run_evals.py` 会从 Git 提交 `b3d9a17` 读取发布 baseline；因此仓库必须包含该提交的完整历史。浅克隆或 GitHub 自动生成的 Source archive 需要显式传入可用的 `--baseline`，否则默认命令会失败。CI 使用 `actions/checkout` 的 `fetch-depth: 0` 满足这一条件。
+默认 `run_evals.py` 会从 Git 提交 `b3d9a17` 读取发布 baseline；因此仓库必须包含该提交的完整历史。浅克隆或 GitHub 自动生成的 Source archive 会在评测开始前以 exit `2` 提示该前置条件；显式传入可用的 `--baseline <skill-dir-or-SKILL.md>` 可继续比较，CI 使用 `actions/checkout` 的 `fetch-depth: 0` 满足默认条件。机器可读范围见 [`docs/support-matrix.json`](../support-matrix.json)。
 
 ### 5) Environment and Config
 

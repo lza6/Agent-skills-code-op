@@ -390,6 +390,21 @@ def run_git_bytes(*args: str) -> bytes:
     return result.stdout
 
 
+def preflight_default_git_baseline(ref: str, skill_relative_path: str) -> None:
+    """Fail early with a recovery path when the published Git baseline is unavailable."""
+
+    core_path = f"{skill_relative_path.rstrip('/')}/SKILL.md"
+    try:
+        run_git("rev-parse", "--verify", f"{ref}^{{commit}}")
+        run_git("cat-file", "-e", f"{ref}:{core_path}")
+    except ValueError as error:
+        raise ValueError(
+            f"默认 Git baseline `{ref}` 不可用；当前 checkout 可能是 shallow clone 或 "
+            "GitHub Source archive。请获取包含该提交的完整历史（例如 `git fetch "
+            "--unshallow`），或显式传入 `--baseline <skill-dir-or-SKILL.md>`。"
+        ) from error
+
+
 def load_git_artifact(
     ref: str,
     skill_relative_path: str,
@@ -863,6 +878,10 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def run_evaluation(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
+    if args.baseline is None:
+        preflight_default_git_baseline(
+            args.baseline_git_ref, args.skill_relative_path
+        )
     rubric = load_json_yaml(args.rubric)
     cases = parse_cases(args.cases)
     fixture = analyze_fixture(args.fixture)
