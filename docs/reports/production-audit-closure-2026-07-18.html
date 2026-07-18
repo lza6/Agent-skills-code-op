@@ -98,7 +98,8 @@
         <li>Spec Kit constitution、规格、计划、任务和需求追踪已落在仓库中，而不是只存在于会话。</li>
         <li>本机 CodeGraph 已真实索引 27 个代码文件、773 个节点和 1,286 条边，并查询到 <code>InstallTransaction</code> 及其事务方法；它提供导航证据，不替代运行正确性。</li>
         <li>已按 TDD 先运行新合同/报告测试并得到预期红灯，再实现对应文件；最终结果以 <a href="../audits/2026-07-18-test-ledger.md">测试台账</a> 的本轮命令为准。</li>
-        <li>发布质量门要求 `publish` 依赖双平台 quality；稳定 tag 没有被移动。当前事实由 <a href="../current-state.md">current-state</a> 而非历史 Release 报告定义。</li>
+        <li>发布质量门要求 <code>publish</code> 依赖双平台 quality；稳定 tag 没有被移动。当前事实由 <a href="../current-state.md">current-state</a> 而非历史 Release 报告定义。</li>
+        <li>审计提交 <code>e5d6279</code> 推送后的 <a href="https://github.com/lza6/Agent-skills-code-op/actions/runs/29644508218">双平台 skill-evals</a> 已实际成功；本轮没有创建或移动 Release tag。</li>
         <li>安全分析覆盖安装目录、ZIP、外部 CLI 配置、凭证和 Release 供应链，见 <a href="../audits/2026-07-18-threat-model.md">威胁模型</a>。</li>
       </ul>
     </section>

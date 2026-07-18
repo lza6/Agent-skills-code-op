@@ -8,7 +8,7 @@ v1.7.0 release and recording external CLI limits without fabrication.
 
 ## Current Phase
 
-Phase 5 — independent review and delivery
+Complete — remote CI evidence recorded
 
 ## Phases
 
@@ -48,8 +48,8 @@ Phase 5 — independent review and delivery
 
 - [x] Request an independent read-only six-dimension review of the final diff.
 - [x] Fix every in-scope review finding and request reviewer re-verification.
-- [ ] Commit, push and verify CI only after the reviewer approves.
-- **Status:** in_progress
+- [x] Commit, push and verify CI only after the reviewer approves.
+- **Status:** complete
 
 ## Key Questions
 

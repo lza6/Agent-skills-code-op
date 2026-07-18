@@ -18,6 +18,7 @@
 | 客户端 probe | `run_client_matrix.py` 无 `--execute` | NOT_RUN（预期） | 生成三 profile probe 报告但不启动 Agent；没有凭证/模型时不把 probe 当成功。 |
 | 导航 | CodeGraph 本地索引与符号查询 | PASS | `init --index` 后 `sync .`；27 files、773 nodes、1,286 edges，`InstallTransaction` 查询命中定义和事务方法。 |
 | 独立审查 | 同一只读 Critic 初审→修复→复验 | APPROVE | 四项 Required 均修复；六维结论见 `reviews/production-audit-closure-review-2026-07-18.md`。 |
+| 远端 CI | `skill-evals` push workflow | PASS | [29644508218](https://github.com/lza6/Agent-skills-code-op/actions/runs/29644508218)：Ubuntu 22s、Windows 44s 全绿；Windows coverage job 按 workflow 设计 skip。 |
 | 外部 CLI | Codex/Claude/Gemini 真实行为矩阵 | partial | 历史新鲜事实：Codex 3/3 PASS；Claude 无可用模型；Gemini 无隔离凭证。 |
 
 质量命令中一次误将 `--self-test` 传给不支持该参数的 `run_client_matrix.py`，已停止重试并改为

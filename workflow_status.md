@@ -20,7 +20,7 @@
 | A6 | 外部能力受控验证 | passed_with_boundary | A1,A2 | 已逐项调用/分类；Understand Anything 已安装/构建但 `.ua` 图谱被 Windows sandbox `os error 206` 阻断；补充的本机 CodeGraph 已实际索引 27 文件、773 nodes、1,286 edges 并完成符号查询，二者均未被夸大为行为验证。 |
 | A7 | 全量适用验证和交接材料 | passed | A4,A5,A6 | 适用 suites、registry/inventory、local release build/verify、threat model、HTML 报告及真实浏览器 quiz journey 均有新鲜证据。 |
 | A8 | 真实三 CLI 行为矩阵 | external_blocked | A7 | Codex 当前 3/3 PASS；Claude 无可用模型、Gemini 无隔离凭证。只有受控账户三案例通过才能关闭。 |
-| A9 | 独立 Critic 修复复验和发布 | in_progress | A7 | `reviews/production-audit-closure-review-2026-07-18.md` 已由同一只读 Critic 复验 Approve；下一步仅提交/push 本轮 tracked diff，等待双 OS CI。稳定 tag 另行按版本流程处理。 |
+| A9 | 独立 Critic 修复复验和发布 | passed | A7 | 同一只读 Critic 复验 Approve；`e5d6279` 已推送，双 OS [skill-evals 29644508218](https://github.com/lza6/Agent-skills-code-op/actions/runs/29644508218) 全绿。稳定 `v1.7.0` tag 未移动；本轮未创建新 Release。 |
 
 ## 当前持续治理与隔离 CLI 验收（2026-07-18，基线 `290bdc4`）
 

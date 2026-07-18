@@ -90,7 +90,7 @@ browser or DOM harness verifies correct and incorrect quiz feedback.
 - [x] T028 Run `git diff --check`, verify no generated secret/agent credential files are staged, and update `workflow_status.md`, `task_plan.md`, `findings.md` and `progress.md`.
 - [x] T029 Request an independent read-only six-dimension review and save its findings under `reviews/`.
 - [x] T030 Fix every in-scope reviewer finding, rerun affected tests and request the same reviewer to re-verify.
-- [ ] T031 Commit and push only after reviewer approval; wait for dual-platform CI and record its immutable run evidence.
+- [x] T031 Commit and push only after reviewer approval; wait for dual-platform CI and record its immutable run evidence.
 
 ## Dependencies and Execution Order
 
