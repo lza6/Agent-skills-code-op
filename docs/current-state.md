@@ -1,25 +1,25 @@
 # 当前项目事实
 
-> 更新于 2026-07-18；发布后文档锚点为 commit `290bdc4`。本页是当前项目事实的唯一入口，不把 `main` HEAD 视为固定发布事实。
+> 更新于 2026-07-18；稳定发布 tag 解引用到 commit `80b416e`。本页是当前项目事实的唯一入口，不把 `main` HEAD 视为固定发布事实。
 
 ## 稳定发布
 
-- 当前稳定安装来源是 [`v1.6.0`](https://github.com/lza6/Agent-skills-code-op/releases/tag/v1.6.0)，annotated tag 解引用到 `3471adadb142d884e6f566f846f4913649bc88e0`。
-- README 的默认安装地址保持 `tree/v1.6.0`；`main` 仅用于开发版/滚动版本，不替代稳定 tag。
-- `v1.6.0` tag 内的 `release/metadata.json` 声明 `version: 1.6.0`、`tag: v1.6.0`，并指向本版本的 release note。当前工作树的 metadata 是尚未发布的 `v1.7.0` 候选；在其 tag、Release 和发布后复验均完成前，不替代稳定安装来源。
+- 当前稳定安装来源是 [`v1.7.0`](https://github.com/lza6/Agent-skills-code-op/releases/tag/v1.7.0)，annotated tag 解引用到 `80b416ecd73d953dc0ead66c9996b142d21a7ecd`。
+- README 的默认安装地址为 `tree/v1.7.0`；`main` 仅用于开发版/滚动版本，不替代稳定 tag。
+- `v1.7.0` tag 内的 `release/metadata.json` 声明 `version: 1.7.0`、`tag: v1.7.0`，并指向本版本的 release note。
 
 ## Release 与供应链证明
 
-- [main 双平台 skill-evals（29631900219）](https://github.com/lza6/Agent-skills-code-op/actions/runs/29631900219) 与 [tag release workflow（29632189527）](https://github.com/lza6/Agent-skills-code-op/actions/runs/29632189527) 均已成功；后者创建 Release。
-- 发布后文档验证的 [main skill-evals（29632673102）](https://github.com/lza6/Agent-skills-code-op/actions/runs/29632673102) 也成功，绑定 `290bdc4`。
-- Release 附件：[ZIP](https://github.com/lza6/Agent-skills-code-op/releases/download/v1.6.0/production-delivery-orchestrator-v1.6.0.zip)、[SHA256SUMS.txt](https://github.com/lza6/Agent-skills-code-op/releases/download/v1.6.0/SHA256SUMS.txt)、[provenance.json](https://github.com/lza6/Agent-skills-code-op/releases/download/v1.6.0/provenance.json)。ZIP SHA-256 为 `199f9fc66dd8739238c100588b3a1616838597ae5bd7cb0f41b724da6bf17c99`。
-- 已执行的下载复验包括 checksum、`release/build_release.py --verify --expected-commit 3471adadb142d884e6f566f846f4913649bc88e0`、`gh attestation verify` 和 tagged `npx skills --list`。完整事实与命令结果见 [v1.6.0 release note](releases/v1.6.0.md)。
+- [main 双平台 skill-evals（29639353470）](https://github.com/lza6/Agent-skills-code-op/actions/runs/29639353470) 与 [tag release workflow（29639416337）](https://github.com/lza6/Agent-skills-code-op/actions/runs/29639416337) 均已成功；后者在两个 quality job 成功后创建 Release、attestation 和附件。
+- Release 附件：[ZIP](https://github.com/lza6/Agent-skills-code-op/releases/download/v1.7.0/production-delivery-orchestrator-v1.7.0.zip)、[SHA256SUMS.txt](https://github.com/lza6/Agent-skills-code-op/releases/download/v1.7.0/SHA256SUMS.txt)、[provenance.json](https://github.com/lza6/Agent-skills-code-op/releases/download/v1.7.0/provenance.json)。ZIP SHA-256 为 `199f9fc66dd8739238c100588b3a1616838597ae5bd7cb0f41b724da6bf17c99`。
+- 已执行的下载复验包括 checksum、`release/build_release.py --verify --expected-commit 80b416ecd73d953dc0ead66c9996b142d21a7ecd`、`gh attestation verify` 和 tagged `npx skills --list`。完整事实与命令结果见 [v1.7.0 release note](releases/v1.7.0.md)。
 
 ## 真实 CLI 矩阵
 
-- R5：partial。Codex CLI `0.144.5`：`3/3 PASS`。
-- Claude Code `2.1.212`：凭证缺失（隔离环境未登录）；Gemini CLI `0.51.0`：凭证缺失（未提供认证变量）。两者都没有产生技能行为结论。
-- 因此这不是跨客户端通过，也不是技能行为失败。重跑条件和脱敏逐案例结果见 [真实 CLI 矩阵证据](releases/evidence/v1.6.0-real-cli-matrix.md)。
+- R5：partial。Codex CLI `0.144.5`：新 hardened runner 的 `3/3 PASS`。
+- Claude Code `2.1.212`：实际执行但本机 OAuth 账户没有可用模型；Gemini CLI `0.51.0`：未提供隔离 API/Vertex 凭证，未启动 Agent。两者都没有产生技能行为通过结论。
+- 默认实跑仅接受仓库外的 `--agent-env-file`。已登录 Codex/Claude 如需使用本机 client config，必须同时显式传入 `--execute --allow-unsafe-host-execution --allow-host-client-config`；如需使用本机代理配置，还必须额外传入 `--allow-host-network-configuration`。此路径不复制凭证、不继承其他宿主环境；Gemini 没有 host-config fallback。
+- 因此这不是跨客户端通过，也不是技能行为失败。完整边界和复跑条件见 [v1.7.0 release note](releases/v1.7.0.md)。
 
 ## Registry 当前范围
 
@@ -28,5 +28,5 @@
 
 ## 边界
 
-- `290bdc4` 是发布后文档更新锚点，不是 release tag 的提交，也不承诺后续 `main` 不会前进。
-- `workflow_status.md` 顶部的当前 v1.6.0 发布闭环与本页交叉校验；其后的台账、历史审计和历史 release 说明不是本页的 current-state。
+- `80b416e` 是 release tag 的提交；后续 `main` 文档更新不移动该 tag。
+- `workflow_status.md` 顶部的当前 v1.7.0 发布闭环与本页交叉校验；其后的台账、历史审计和历史 release 说明不是本页的 current-state。

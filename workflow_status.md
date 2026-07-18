@@ -12,9 +12,19 @@
 | G3 | 当前事实一致性 | passed | `docs/current-state.md` 是唯一入口；metadata/README/release note/status 当前段以 stdlib `5/5` 交叉检查，历史段不参与。 |
 | G4 | registry 与供应链 inventory | passed | `skills/registry.json` 可重建、schema=1、当前单技能可查询；`docs/dependency-inventory.json` 声明 stdlib-only、无 manifest/lockfile 并列出锁定 Actions SHA；定向 `5/5 + 3/3` 通过。 |
 | G5 | 可复跑 coverage 与全仓凭证扫描 | passed | Linux CI 将用 stdlib `trace` 对三个 eval runner 执行版本化 line baseline（matrix `56.57%`、eval `67.18%`、forward `62.86%`，minimum 为 `55%/65%/61%`）；全仓 tracked UTF-8 扫描已启用，仅两份明确构造 token pattern 的测试夹具豁免。 |
-| G6 | 独立六维 Critic | pending | 检查本轮 runner、当前状态、registry/inventory、coverage、CLI 预检和实际回归证据；Critic 不得修改文件。 |
+| G6 | 独立六维 Critic | passed | 最终只读审查覆盖需求、逻辑、边界、质量、覆盖和实际结果；P0/P1/P2 均为 0，并复验 current-state 的 stable/candidate 边界。 |
 
 - 真实多 CLI 的停止条件：默认路径是将短期凭证放在**仓库外**的 env 文件并显式传入 `--agent-env-file` 后，Codex 使用 `OPENAI_API_KEY`、Claude 使用 `ANTHROPIC_API_KEY`、Gemini 使用 `GEMINI_API_KEY`/`GOOGLE_API_KEY` 或完整 Vertex 集。已登录 Codex/Claude 也可以显式传入 `--execute --allow-unsafe-host-execution --allow-host-client-config`，仍只允许对应 CLI 配置根；Gemini 不提供 host-config fallback。只有每个启用 profile 的三例均通过，G2 才能从 `partial` 改为 `passed`。
+
+## 当前 v1.7.0 发布闭环（2026-07-18）
+
+| ID | 节点 | 状态 | 验收 |
+|---|---|---|---|
+| R1 | 候选本地质量门与独立审查 | passed | workflow `17`、eval/forward/matrix `60`（2 Linux skip）、registry `5`、tools `4`、release `7` 全部通过；独立六维审查 P0/P1/P2 为 0。 |
+| R2 | main push 双平台 quality | passed | [skill-evals 29639353470](https://github.com/lza6/Agent-skills-code-op/actions/runs/29639353470) 的 Ubuntu/Windows 均成功，绑定 `80b416e`。 |
+| R3 | annotated tag 与 Release | passed | `v1.7.0` annotated tag 解引用到 `80b416ecd73d953dc0ead66c9996b142d21a7ecd`；[release 29639416337](https://github.com/lza6/Agent-skills-code-op/actions/runs/29639416337) 的双 quality 与 publish 全部成功，并创建 attestation/三附件。 |
+| R4 | 下载、provenance 与发现复验 | passed | 下载 ZIP SHA-256 `199f9fc66dd8739238c100588b3a1616838597ae5bd7cb0f41b724da6bf17c99` 与 sums/digest 一致；`--expected-commit`、`gh attestation verify` 与 tagged `npx skills --list` 均返回成功。 |
+| R5 | 真实 Agent CLI 证据 | partial | Codex `0.144.5` 三例 PASS；Claude `2.1.212` 实际运行但账户无可用模型；Gemini `0.51.0` 未提供隔离认证。未声称跨 CLI 全绿。 |
 
 ## 当前 v1.6.0 发布闭环（2026-07-18）
 
@@ -69,7 +79,7 @@
 
 - 本轮结论：B1–B6 已完成，当前分析/状态文档获独立六维 Critic PASS。下一节点不是自动编码，而是等待用户选择 P0，或 P0+P1 的代码改造授权；Release、推送、tag 和外部真实 Agent 执行仍须另行授权。
 
-> **历史分界。** 以下所有 release 契约、节点、验证台账和“当前”措辞均是产生当日的历史记录，不是现在的 current-state；唯一当前入口为 `docs/current-state.md`，状态机以本文件顶部的 G1–G6 与 v1.6.0 R1–R5 看板为准。
+> **历史分界。** 以下所有 release 契约、节点、验证台账和“当前”措辞均是产生当日的历史记录，不是现在的 current-state；唯一当前入口为 `docs/current-state.md`，状态机以本文件顶部的 G1–G6 与 v1.7.0 R1–R5 看板为准。
 
 ## 当前证据完成门与最小实验发布契约（2026-07-18，目标 v1.5.0）
 
