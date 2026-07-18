@@ -7,13 +7,13 @@
 
 | ID | 节点 | 状态 | 验收 |
 |---|---|---|---|
-| R1 | 版本化元数据和本地 release gate | in progress | metadata/README/release note 一致，当前代码通过完整本地套件和基于待发布 commit 的制品复验 |
-| R2 | 分主题 commit 与 main push | pending | main 可见、工作树仅含预期发布回填变更 |
-| R3 | `v1.6.0` tag 和 GitHub Release | pending | 双 OS quality 成功，publish 在 `needs: quality` 后成功，附件齐全且 tag 绑定 release commit |
-| R4 | 下载与供应链复验 | pending | checksum、provenance、`--expected-commit`、GitHub attestation、tagged `npx skills --list` 均实际通过 |
-| R5 | 真实 Agent CLI 证据 | pending | 在隔离临时 fixture 中执行，不泄露凭据，报告区分真实/合成并绑定 v1.6.0 artifact |
+| R1 | 版本化元数据和本地 release gate | passed | metadata/README/release note 一致；完整本地套件和基于 `3471ad…` 的制品复验通过 |
+| R2 | 分主题 commit 与 main push | passed | `3471adadb142d884e6f566f846f4913649bc88e0` 已在 `origin/main`，发布前工作树干净 |
+| R3 | `v1.6.0` tag 和 GitHub Release | passed | annotated tag 解引用到 `3471ad…`；[run 29632189527](https://github.com/lza6/Agent-skills-code-op/actions/runs/29632189527) 的双 OS quality 与 `publish` 全部成功；三附件已上传 |
+| R4 | 下载与供应链复验 | passed | 下载 SHA-256 `199f9fc66dd8739238c100588b3a1616838597ae5bd7cb0f41b724da6bf17c99`；checksum/provenance、`--expected-commit`、GitHub attestation 与 tagged `npx skills --list` 均实际通过 |
+| R5 | 真实 Agent CLI 证据 | partial | 隔离 fixture 中 Codex CLI `0.144.5` 三例 PASS；Claude Code `2.1.212` 无登录态、Gemini CLI `0.51.0` 无认证变量，均为凭证缺失而非技能行为结果；逐案例脱敏摘要见 `docs/releases/evidence/v1.6.0-real-cli-matrix.md` |
 
-- 不得宣布发布完成，直到 R1–R5 均有新鲜结果；若 CLI/远端权限、配额或网络失败，保留精确失败证据和可重试步骤。
+- 发布、制品和供应链闭环已完成（R1–R4）。完整三客户端真实行为证据尚未闭环：需要在仓库外提供短期 Claude/Gemini 凭证并以隔离 `--agent-env-file` 重跑 R5；不得把当前认证失败写成通过或技能行为失败。
 
 ## 当前 P0/P1 实施闭环（2026-07-18，基线 HEAD `eb3bf18`）
 
