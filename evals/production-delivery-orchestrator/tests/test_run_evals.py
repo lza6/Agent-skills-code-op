@@ -36,6 +36,13 @@ class PortableReportPathTest(unittest.TestCase):
         values.update(overrides)
         return argparse.Namespace(**values)
 
+    def test_report_prefix_is_a_safe_file_name_only(self) -> None:
+        self.assertEqual(RUNNER.validate_report_prefix("offline-2026.07"), "offline-2026.07")
+        for unsafe in ("", ".hidden", "..", "report..old", "../escape", "nested/report", r"nested\\report", r"C:\\report"):
+            with self.subTest(unsafe=unsafe):
+                with self.assertRaisesRegex(ValueError, "report-prefix"):
+                    RUNNER.validate_report_prefix(unsafe)
+
     def test_repo_paths_use_posix_relative_display_on_windows_and_unix(self) -> None:
         cases = (
             (

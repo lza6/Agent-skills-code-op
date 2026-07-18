@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -50,6 +51,245 @@ class ForwardTestHarnessTest(unittest.TestCase):
             digest.update(len(content).to_bytes(8, byteorder="big"))
             digest.update(content)
         return digest.hexdigest()
+
+    def test_report_prefix_is_a_safe_file_name_only(self) -> None:
+        self.assertEqual(HARNESS.validate_report_prefix("forward-2026.07"), "forward-2026.07")
+        for unsafe in ("", ".hidden", "..", "report..old", "../escape", "nested/report", r"nested\\report", r"C:\\report"):
+            with self.subTest(unsafe=unsafe):
+                with self.assertRaisesRegex(ValueError, "report-prefix"):
+                    HARNESS.validate_report_prefix(unsafe)
+
+    def test_agent_output_is_total_byte_capped_and_resource_failure_is_redacted(self) -> None:
+        secret = "agent-output-secret-1234567890"
+        with tempfile.TemporaryDirectory(prefix="pdo-output-cap-") as temp:
+            helper = Path(temp) / "noisy_stub.py"
+            helper.write_text(
+                "import sys\n"
+                f"print('Bearer {secret}' + 'x' * 1024)\n"
+                f"print('OPENAI_API_KEY={secret}' + 'y' * 1024, file=sys.stderr)\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(HARNESS, "MAX_AGENT_OUTPUT_BYTES", 128):
+                agent = HARNESS.run_agent([sys.executable, str(helper)], Path(temp), None)
+
+        output_capture = HARNESS.agent_output_capture(agent)
+        self.assertTrue(output_capture["truncated"])
+        self.assertLessEqual(output_capture["captured_bytes"], 128)
+        self.assertLessEqual(
+            len(agent.stdout.encode("utf-8")) + len(agent.stderr.encode("utf-8")),
+            128,
+        )
+
+        before = subprocess.CompletedProcess(HARNESS.TEST_COMMAND, 1, "", "")
+        after = subprocess.CompletedProcess(HARNESS.TEST_COMMAND, 0, "", "")
+        clean = subprocess.CompletedProcess(["git", "status"], 0, "", "")
+        with mock.patch.object(HARNESS, "init_fixture", return_value="abcdef0"):
+            with mock.patch.object(HARNESS, "skill_artifact_sha256", return_value="hash"):
+                with mock.patch.object(HARNESS, "run", side_effect=[before, after, clean, clean]):
+                    with mock.patch.object(HARNESS, "run_agent", return_value=agent):
+                        result = HARNESS.evaluate_case(HARNESS.CASES[0], ["safe-stub"])
+
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(result["error"]["kind"], "resource_failure")
+        self.assertEqual(result["resource_failure"]["kind"], "output_truncated")
+        self.assertNotIn(secret, json.dumps(result, ensure_ascii=False))
+
+    def test_agent_timeout_terminates_safe_stub_process_tree(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-process-tree-") as temp:
+            child_pid_path = Path(temp) / "child.pid"
+            helper = Path(temp) / "spawns_child_stub.py"
+            helper.write_text(
+                "import subprocess\n"
+                "import sys\n"
+                "import time\n"
+                "from pathlib import Path\n"
+                "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                "Path(sys.argv[1]).write_text(str(child.pid), encoding='utf-8')\n"
+                "time.sleep(30)\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(HARNESS, "AGENT_TIMEOUT_SECONDS", 2):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    HARNESS.run_agent(
+                        [sys.executable, str(helper), str(child_pid_path)], Path(temp), None
+                    )
+
+            self.assertTrue(child_pid_path.is_file())
+            child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and self._process_is_alive(child_pid):
+                time.sleep(0.05)
+            self.assertFalse(self._process_is_alive(child_pid))
+
+    def test_parent_exit_with_pipe_holding_child_is_cleaned_and_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-parent-exit-child-") as temp:
+            child_pid_path = Path(temp) / "child.pid"
+            helper = Path(temp) / "parent_exits_stub.py"
+            helper.write_text(
+                "import subprocess\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+                "Path(sys.argv[1]).write_text(str(child.pid), encoding='utf-8')\n"
+                "print('parent exits while child still owns inherited pipes', flush=True)\n",
+                encoding="utf-8",
+            )
+            child_pid: int | None = None
+            try:
+                result = HARNESS.run_agent(
+                    [sys.executable, str(helper), str(child_pid_path)], Path(temp), None
+                )
+                child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+
+                failure = HARNESS.agent_resource_failure(result)
+                self.assertIsNotNone(failure)
+                self.assertEqual(failure["kind"], "orphaned_child_process")
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and self._process_is_alive(child_pid):
+                    time.sleep(0.05)
+                self.assertFalse(self._process_is_alive(child_pid))
+            finally:
+                if child_pid is not None and self._process_is_alive(child_pid):
+                    if sys.platform == "win32":
+                        subprocess.run(
+                            ["taskkill", "/PID", str(child_pid), "/T", "/F"],
+                            check=False,
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    else:
+                        os.kill(child_pid, 9)
+
+    def test_parent_exit_with_closed_pipe_child_is_cleaned_and_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-parent-exit-closed-pipe-") as temp:
+            child_pid_path = Path(temp) / "child.pid"
+            helper = Path(temp) / "parent_exits_closed_pipes_stub.py"
+            helper.write_text(
+                "import subprocess\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "child = subprocess.Popen([sys.executable, '-c', "
+                "'import os, time; os.close(1); os.close(2); time.sleep(30)'])\n"
+                "Path(sys.argv[1]).write_text(str(child.pid), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            child_pid: int | None = None
+            try:
+                result = HARNESS.run_agent(
+                    [sys.executable, str(helper), str(child_pid_path)], Path(temp), None
+                )
+                child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+
+                failure = HARNESS.agent_resource_failure(result)
+                self.assertIsNotNone(failure)
+                self.assertEqual(failure["kind"], "orphaned_child_process")
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and self._process_is_alive(child_pid):
+                    time.sleep(0.05)
+                self.assertFalse(self._process_is_alive(child_pid))
+            finally:
+                if child_pid is not None and self._process_is_alive(child_pid):
+                    if sys.platform == "win32":
+                        subprocess.run(
+                            ["taskkill", "/PID", str(child_pid), "/T", "/F"],
+                            check=False,
+                            stdin=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    else:
+                        os.kill(child_pid, 9)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux subreaper")
+    def test_parent_exit_with_setsid_child_is_cleaned_and_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-parent-exit-setsid-") as temp:
+            child_pid_path = Path(temp) / "child.pid"
+            helper = Path(temp) / "parent_exits_setsid_stub.py"
+            helper.write_text(
+                "import subprocess\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "child = subprocess.Popen([sys.executable, '-c', "
+                "'import os, time; os.setsid(); os.close(1); os.close(2); time.sleep(30)'])\n"
+                "Path(sys.argv[1]).write_text(str(child.pid), encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            child_pid: int | None = None
+            try:
+                result = HARNESS.run_agent(
+                    [sys.executable, str(helper), str(child_pid_path)], Path(temp), None
+                )
+                child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+
+                failure = HARNESS.agent_resource_failure(result)
+                self.assertIsNotNone(failure)
+                self.assertEqual(failure["kind"], "orphaned_child_process")
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and self._process_is_alive(child_pid):
+                    time.sleep(0.05)
+                self.assertFalse(self._process_is_alive(child_pid))
+            finally:
+                if child_pid is not None and self._process_is_alive(child_pid):
+                    os.kill(child_pid, 9)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux subreaper")
+    def test_parent_exit_with_setsid_grandchild_is_cleaned_and_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-parent-exit-setsid-grandchild-") as temp:
+            grandchild_pid_path = Path(temp) / "grandchild.pid"
+            helper = Path(temp) / "parent_exits_setsid_grandchild_stub.py"
+            grandchild_code = "import os, time; os.close(1); os.close(2); time.sleep(30)"
+            child_code = (
+                "import os\n"
+                "import subprocess\n"
+                "import sys\n"
+                "from pathlib import Path\n"
+                "os.setsid()\n"
+                f"grandchild = subprocess.Popen([sys.executable, '-c', {grandchild_code!r}])\n"
+                "Path(sys.argv[1]).write_text(str(grandchild.pid), encoding='utf-8')\n"
+            )
+            helper.write_text(
+                "import subprocess\n"
+                "import sys\n"
+                f"child_code = {child_code!r}\n"
+                "subprocess.Popen([sys.executable, '-c', child_code, sys.argv[1]])\n",
+                encoding="utf-8",
+            )
+            grandchild_pid: int | None = None
+            try:
+                result = HARNESS.run_agent(
+                    [sys.executable, str(helper), str(grandchild_pid_path)],
+                    Path(temp),
+                    None,
+                )
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and not grandchild_pid_path.is_file():
+                    time.sleep(0.05)
+                grandchild_pid = int(grandchild_pid_path.read_text(encoding="utf-8"))
+
+                failure = HARNESS.agent_resource_failure(result)
+                self.assertIsNotNone(failure)
+                self.assertEqual(failure["kind"], "orphaned_child_process")
+                while time.monotonic() < deadline and self._process_is_alive(grandchild_pid):
+                    time.sleep(0.05)
+                self.assertFalse(self._process_is_alive(grandchild_pid))
+            finally:
+                if grandchild_pid is not None and self._process_is_alive(grandchild_pid):
+                    os.kill(grandchild_pid, 9)
+
+    @staticmethod
+    def _process_is_alive(pid: int) -> bool:
+        if sys.platform != "win32":
+            stat_path = Path(f"/proc/{pid}/stat")
+            if stat_path.is_file():
+                fields = stat_path.read_text(encoding="utf-8").split()
+                if len(fields) > 2 and fields[2] == "Z":
+                    return False
+        try:
+            os.kill(pid, 0)
+        except (OSError, SystemError):
+            return False
+        return True
 
     def test_redacts_text_commands_and_persisted_reports(self) -> None:
         secrets = {

@@ -9,15 +9,19 @@ local helper and is only a harness test, never evidence of real Agent behavior.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
 import re
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -160,6 +164,388 @@ RESERVED_AGENT_ENV_KEYS = {
     "TEMP",
     "PYTHONUTF8",
 }
+REPORT_PREFIX_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+AGENT_TIMEOUT_SECONDS = 600
+MAX_AGENT_OUTPUT_BYTES = 256 * 1024
+PROCESS_KILL_GRACE_SECONDS = 2
+PROCESS_READER_JOIN_SECONDS = 1
+READER_COMPLETION_GRACE_SECONDS = 0.25
+WINDOWS_CREATE_SUSPENDED = 0x00000004
+
+
+def validate_report_prefix(prefix: str) -> str:
+    """Allow only a single, portable report filename prefix."""
+
+    if (
+        not isinstance(prefix, str)
+        or not REPORT_PREFIX_RE.fullmatch(prefix)
+        or ".." in prefix
+        or "/" in prefix
+        or "\\" in prefix
+    ):
+        raise ValueError(
+            "report-prefix 必须是纯安全文件名前缀：以字母或数字开头，"
+            "只可包含字母、数字、._-，且不得包含 .. 或路径分隔符"
+        )
+    return prefix
+
+
+class _BoundedOutput:
+    """Drain both process streams while retaining no more than a shared byte budget."""
+
+    def __init__(self, limit_bytes: int) -> None:
+        if limit_bytes < 0:
+            raise ValueError("output byte limit 不得为负数")
+        self.limit_bytes = limit_bytes
+        self.captured_bytes = 0
+        self._buffers = {"stdout": bytearray(), "stderr": bytearray()}
+        self._truncated = {"stdout": False, "stderr": False}
+        self._reader_errors: list[str] = []
+        self._lock = threading.Lock()
+
+    def add(self, stream_name: str, chunk: bytes) -> None:
+        with self._lock:
+            remaining = self.limit_bytes - self.captured_bytes
+            retained = chunk[: max(remaining, 0)]
+            self._buffers[stream_name].extend(retained)
+            self.captured_bytes += len(retained)
+            if len(retained) != len(chunk):
+                self._truncated[stream_name] = True
+
+    def add_reader_error(self, stream_name: str, error: OSError) -> None:
+        with self._lock:
+            self._reader_errors.append(f"{stream_name}: {type(error).__name__}")
+
+    def text(self, stream_name: str) -> str:
+        with self._lock:
+            return bytes(self._buffers[stream_name]).decode("utf-8", "replace")
+
+    def metadata(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "limit_bytes": self.limit_bytes,
+                "captured_bytes": self.captured_bytes,
+                "truncated": any(self._truncated.values()),
+                "stdout_truncated": self._truncated["stdout"],
+                "stderr_truncated": self._truncated["stderr"],
+                "reader_errors": list(self._reader_errors),
+            }
+
+
+def _drain_stream(stream: Any, stream_name: str, output: _BoundedOutput) -> None:
+    try:
+        while chunk := stream.read(8192):
+            output.add(stream_name, chunk)
+    except OSError as error:
+        output.add_reader_error(stream_name, error)
+    finally:
+        stream.close()
+
+
+def _attach_output_capture(
+    result: subprocess.CompletedProcess[str] | subprocess.TimeoutExpired,
+    output: _BoundedOutput,
+) -> None:
+    # CompletedProcess and TimeoutExpired intentionally permit extension attributes.
+    result.output_capture = output.metadata()  # type: ignore[attr-defined]
+
+
+def _fallback_output_capture(stdout: str, stderr: str) -> dict[str, Any]:
+    captured_bytes = len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
+    return {
+        "limit_bytes": MAX_AGENT_OUTPUT_BYTES,
+        "captured_bytes": captured_bytes,
+        "truncated": False,
+        "stdout_truncated": False,
+        "stderr_truncated": False,
+        "reader_errors": [],
+    }
+
+
+def agent_output_capture(result: Any) -> dict[str, Any]:
+    """Return stable output-capture metadata for new and legacy runner callers."""
+
+    metadata = getattr(result, "output_capture", None)
+    if isinstance(metadata, dict):
+        return {
+            "limit_bytes": metadata.get("limit_bytes", MAX_AGENT_OUTPUT_BYTES),
+            "captured_bytes": metadata.get("captured_bytes", 0),
+            "truncated": bool(metadata.get("truncated")),
+            "stdout_truncated": bool(metadata.get("stdout_truncated")),
+            "stderr_truncated": bool(metadata.get("stderr_truncated")),
+            "reader_errors": list(metadata.get("reader_errors", [])),
+        }
+    return _fallback_output_capture(
+        getattr(result, "stdout", "") or "", getattr(result, "stderr", "") or ""
+    )
+
+
+def agent_resource_failure(result: Any) -> dict[str, str] | None:
+    failure = getattr(result, "resource_failure", None)
+    if isinstance(failure, dict) and isinstance(failure.get("kind"), str):
+        return {
+            "kind": failure["kind"],
+            "message": str(failure.get("message", "Agent 资源处理失败")),
+        }
+    output_capture = agent_output_capture(result)
+    if output_capture["truncated"]:
+        return {
+            "kind": "output_truncated",
+            "message": "Agent stdout/stderr 超出采集上限；结果不可作为完整行为证据",
+        }
+    if output_capture["reader_errors"]:
+        return {
+            "kind": "output_capture_error",
+            "message": "Agent stdout/stderr 读取失败；结果不可作为完整行为证据",
+        }
+    return None
+
+
+class _WindowsJob:
+    """A Windows Job Object kept alive for the complete child-process lifetime."""
+
+    def __init__(self) -> None:
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+        kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+        kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+        kernel32.TerminateJobObject.restype = wintypes.BOOL
+        kernel32.QueryInformationJobObject.argtypes = [
+            wintypes.HANDLE,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            wintypes.DWORD,
+            ctypes.POINTER(wintypes.DWORD),
+        ]
+        kernel32.QueryInformationJobObject.restype = wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        self._kernel32 = kernel32
+        self._handle = kernel32.CreateJobObjectW(None, None)
+        if not self._handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def assign(self, process: subprocess.Popen[bytes]) -> None:
+        from ctypes import wintypes
+
+        process_handle = wintypes.HANDLE(process._handle)  # type: ignore[attr-defined]
+        if not self._kernel32.AssignProcessToJobObject(self._handle, process_handle):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def terminate(self) -> None:
+        if self._handle and not self._kernel32.TerminateJobObject(self._handle, 1):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+    def active_process_count(self) -> int:
+        from ctypes import wintypes
+
+        class JobObjectBasicAccountingInformation(ctypes.Structure):
+            _fields_ = [
+                ("total_user_time", ctypes.c_longlong),
+                ("total_kernel_time", ctypes.c_longlong),
+                ("this_period_total_user_time", ctypes.c_longlong),
+                ("this_period_total_kernel_time", ctypes.c_longlong),
+                ("total_page_fault_count", wintypes.DWORD),
+                ("total_processes", wintypes.DWORD),
+                ("active_processes", wintypes.DWORD),
+                ("total_terminated_processes", wintypes.DWORD),
+            ]
+
+        info = JobObjectBasicAccountingInformation()
+        bytes_returned = wintypes.DWORD()
+        if not self._kernel32.QueryInformationJobObject(
+            self._handle,
+            1,  # JobObjectBasicAccountingInformation
+            ctypes.byref(info),
+            ctypes.sizeof(info),
+            ctypes.byref(bytes_returned),
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return int(info.active_processes)
+
+    def close(self) -> None:
+        if self._handle:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+
+def _linux_direct_child_pids(parent_pid: int) -> set[int]:
+    children: set[int] = set()
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return children
+    for path in proc_root.iterdir():
+        if not path.name.isdecimal():
+            continue
+        try:
+            status = (path / "status").read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        for line in status.splitlines():
+            if line.startswith("PPid:"):
+                try:
+                    if int(line.split()[1]) == parent_pid:
+                        children.add(int(path.name))
+                except (IndexError, ValueError):
+                    pass
+                break
+    return children
+
+
+class _LinuxSubreaper:
+    """Contain orphaned descendants on Linux after they leave the process group."""
+
+    _PR_SET_CHILD_SUBREAPER = 36
+    _PR_GET_CHILD_SUBREAPER = 37
+
+    def __init__(self) -> None:
+        self._libc = ctypes.CDLL(None, use_errno=True)
+        self._libc.prctl.argtypes = [
+            ctypes.c_int,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+        ]
+        self._libc.prctl.restype = ctypes.c_int
+        previous = ctypes.c_int()
+        if self._libc.prctl(
+            self._PR_GET_CHILD_SUBREAPER,
+            ctypes.cast(ctypes.byref(previous), ctypes.c_void_p).value,
+            0,
+            0,
+            0,
+        ):
+            raise OSError(ctypes.get_errno(), "PR_GET_CHILD_SUBREAPER failed")
+        self._previous = bool(previous.value)
+        if not self._previous and self._libc.prctl(
+            self._PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0
+        ):
+            raise OSError(ctypes.get_errno(), "PR_SET_CHILD_SUBREAPER failed")
+        self._known_children = _linux_direct_child_pids(os.getpid())
+        self._closed = False
+
+    @staticmethod
+    def _reap(pid: int) -> None:
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            pass
+
+    def cleanup_orphans(self, process: subprocess.Popen[bytes]) -> tuple[list[str], bool]:
+        if self._closed:
+            return [], False
+        errors: list[str] = []
+        detected_orphan = False
+
+        def current_orphans() -> set[int]:
+            orphaned = _linux_direct_child_pids(os.getpid()) - self._known_children
+            if process.poll() is None:
+                orphaned.discard(process.pid)
+            return orphaned
+
+        def signal_orphans(signal_number: int, label: str) -> None:
+            for pid in current_orphans():
+                try:
+                    os.kill(pid, signal_number)
+                except ProcessLookupError:
+                    continue
+                except OSError as error:
+                    errors.append(f"subreaper_{label}_{type(error).__name__}")
+
+        term_deadline = time.monotonic() + PROCESS_KILL_GRACE_SECONDS
+        while time.monotonic() < term_deadline:
+            orphaned = current_orphans()
+            if not orphaned:
+                return errors, detected_orphan
+            detected_orphan = True
+            signal_orphans(signal.SIGTERM, "sigterm")
+            for pid in orphaned:
+                self._reap(pid)
+            time.sleep(0.05)
+
+        kill_deadline = time.monotonic() + PROCESS_KILL_GRACE_SECONDS
+        while time.monotonic() < kill_deadline:
+            orphaned = current_orphans()
+            if not orphaned:
+                return errors, detected_orphan
+            detected_orphan = True
+            signal_orphans(signal.SIGKILL, "sigkill")
+            for pid in orphaned:
+                self._reap(pid)
+            time.sleep(0.05)
+
+        if current_orphans():
+            errors.append("subreaper_child_did_not_exit")
+        return errors, detected_orphan
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        if not self._previous and self._libc.prctl(
+            self._PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0
+        ):
+            raise OSError(ctypes.get_errno(), "PR_SET_CHILD_SUBREAPER reset failed")
+
+
+def _resume_windows_suspended_process(process: subprocess.Popen[bytes]) -> None:
+    """Resume the single initial thread after its process entered the Job Object."""
+
+    from ctypes import wintypes
+
+    class ThreadEntry32(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ThreadID", wintypes.DWORD),
+            ("th32OwnerProcessID", wintypes.DWORD),
+            ("tpBasePri", ctypes.c_long),
+            ("tpDeltaPri", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Thread32First.argtypes = [wintypes.HANDLE, ctypes.POINTER(ThreadEntry32)]
+    kernel32.Thread32First.restype = wintypes.BOOL
+    kernel32.Thread32Next.argtypes = [wintypes.HANDLE, ctypes.POINTER(ThreadEntry32)]
+    kernel32.Thread32Next.restype = wintypes.BOOL
+    kernel32.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenThread.restype = wintypes.HANDLE
+    kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+    kernel32.ResumeThread.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x00000004, 0)
+    invalid_handle = ctypes.c_void_p(-1).value
+    if snapshot == invalid_handle:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        entry = ThreadEntry32()
+        entry.dwSize = ctypes.sizeof(ThreadEntry32)
+        found = bool(kernel32.Thread32First(snapshot, ctypes.byref(entry)))
+        while found:
+            if entry.th32OwnerProcessID == process.pid:
+                thread = kernel32.OpenThread(0x0002, False, entry.th32ThreadID)
+                if not thread:
+                    raise ctypes.WinError(ctypes.get_last_error())
+                try:
+                    if kernel32.ResumeThread(thread) == 0xFFFFFFFF:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    return
+                finally:
+                    kernel32.CloseHandle(thread)
+            found = bool(kernel32.Thread32Next(snapshot, ctypes.byref(entry)))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    raise RuntimeError("未找到挂起进程的初始线程")
 
 
 def skill_artifact_files(skill_dir: Path) -> list[Path]:
@@ -375,19 +761,248 @@ def isolated_agent_environment(workspace: Path, extra_env: dict[str, str] | None
     return environment
 
 
+def _terminate_process_tree(
+    process: subprocess.Popen[bytes], windows_job: _WindowsJob | None = None
+) -> tuple[list[str], bool]:
+    """Terminate the runner's contained process group or Job without shell interpolation."""
+
+    errors: list[str] = []
+    descendants_remained = False
+    if os.name == "nt":
+        if windows_job is not None:
+            try:
+                # The parent has already exited in the normal-completion path;
+                # any active Job member is therefore an orphaned descendant.
+                descendants_remained = (
+                    process.poll() is not None
+                    and windows_job.active_process_count() > 0
+                )
+                windows_job.terminate()
+            except OSError as error:
+                errors.append(f"job_terminate_{type(error).__name__}")
+        else:
+            try:
+                termination = subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    check=False,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=PROCESS_KILL_GRACE_SECONDS,
+                )
+                if termination.returncode != 0 and process.poll() is None:
+                    errors.append(f"taskkill_exit_{termination.returncode}")
+            except (OSError, subprocess.TimeoutExpired) as error:
+                errors.append(f"taskkill_{type(error).__name__}")
+    else:
+        group_signalled = False
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            group_signalled = True
+        except ProcessLookupError:
+            if process.poll() is None:
+                errors.append("process_group_not_found")
+        except OSError as error:
+            errors.append(f"process_group_{type(error).__name__}")
+        if group_signalled:
+            descendants_remained = process.poll() is not None
+            time.sleep(READER_COMPLETION_GRACE_SECONDS)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError as error:
+                errors.append(f"process_group_kill_{type(error).__name__}")
+
+    if process.poll() is None:
+        try:
+            process.wait(timeout=PROCESS_KILL_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            if os.name == "nt":
+                try:
+                    process.kill()
+                except OSError as error:
+                    errors.append(f"process_kill_{type(error).__name__}")
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    if process.poll() is None:
+                        errors.append("process_group_kill_not_found")
+                except OSError as error:
+                    errors.append(f"process_group_kill_{type(error).__name__}")
+            try:
+                process.wait(timeout=PROCESS_KILL_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                errors.append("process_tree_did_not_exit")
+    return errors, descendants_remained
+
+
+def _cleanup_process_containment(
+    process: subprocess.Popen[bytes],
+    windows_job: _WindowsJob | None,
+    linux_subreaper: _LinuxSubreaper | None,
+) -> tuple[list[str], bool]:
+    errors, descendants_remained = _terminate_process_tree(process, windows_job)
+    if linux_subreaper is not None:
+        subreaper_errors, subreaper_detected = linux_subreaper.cleanup_orphans(process)
+        errors.extend(subreaper_errors)
+        descendants_remained = descendants_remained or subreaper_detected
+    return errors, descendants_remained
+
+
+def _join_readers(readers: list[threading.Thread], timeout: float) -> int:
+    deadline = time.monotonic() + timeout
+    for reader in readers:
+        reader.join(max(0, deadline - time.monotonic()))
+    return sum(reader.is_alive() for reader in readers)
+
+
+def run_bounded_process(
+    command: list[str],
+    cwd: Path,
+    *,
+    env: dict[str, str] | None = None,
+    timeout: float = AGENT_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run one command with a bounded combined output buffer and timeout cleanup.
+
+    Linux additionally uses a child subreaper to collect detached descendants;
+    Windows assigns the process to a Job Object before resuming it. Other POSIX
+    systems use their process group boundary. All paths continuously drain pipes
+    so a noisy child cannot block on a full OS pipe after report retention is capped.
+    """
+
+    output = _BoundedOutput(MAX_AGENT_OUTPUT_BYTES)
+    process_options: dict[str, Any] = {
+        "cwd": cwd,
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "env": env,
+    }
+    windows_job = _WindowsJob() if os.name == "nt" else None
+    linux_subreaper = _LinuxSubreaper() if sys.platform.startswith("linux") else None
+    if os.name == "nt":
+        process_options["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | WINDOWS_CREATE_SUSPENDED
+        )
+    else:
+        process_options["start_new_session"] = True
+
+    try:
+        process = subprocess.Popen(command, **process_options)
+    except BaseException:
+        if windows_job is not None:
+            windows_job.close()
+        if linux_subreaper is not None:
+            linux_subreaper.close()
+        raise
+    if windows_job is not None:
+        try:
+            windows_job.assign(process)
+            _resume_windows_suspended_process(process)
+        except BaseException:
+            try:
+                process.kill()
+                process.wait(timeout=PROCESS_KILL_GRACE_SECONDS)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            windows_job.close()
+            if linux_subreaper is not None:
+                linux_subreaper.close()
+            raise
+    assert process.stdout is not None
+    assert process.stderr is not None
+    readers = [
+        threading.Thread(
+            target=_drain_stream, args=(process.stdout, "stdout", output), daemon=True
+        ),
+        threading.Thread(
+            target=_drain_stream, args=(process.stderr, "stderr", output), daemon=True
+        ),
+    ]
+    for reader in readers:
+        reader.start()
+
+    try:
+        return_code = process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        cleanup_errors, _ = _cleanup_process_containment(
+            process, windows_job, linux_subreaper
+        )
+        unfinished_readers = _join_readers(readers, PROCESS_READER_JOIN_SECONDS)
+        if unfinished_readers:
+            output.add_reader_error("stream", OSError("reader thread did not finish"))
+        if windows_job is not None:
+            windows_job.close()
+        if linux_subreaper is not None:
+            linux_subreaper.close()
+        timeout_error = subprocess.TimeoutExpired(
+            command,
+            timeout,
+            output=output.text("stdout"),
+            stderr=output.text("stderr"),
+        )
+        _attach_output_capture(timeout_error, output)
+        if cleanup_errors:
+            timeout_error.resource_failure = {  # type: ignore[attr-defined]
+                "kind": "process_tree_cleanup_failed",
+                "message": "进程树清理未完整确认：" + ", ".join(cleanup_errors),
+            }
+        raise timeout_error
+
+    unfinished_readers = _join_readers(readers, READER_COMPLETION_GRACE_SECONDS)
+    resource_failure: dict[str, str] | None = None
+    if unfinished_readers:
+        cleanup_errors, _ = _cleanup_process_containment(
+            process, windows_job, linux_subreaper
+        )
+        unfinished_readers = _join_readers(readers, PROCESS_READER_JOIN_SECONDS)
+        if unfinished_readers:
+            output.add_reader_error("stream", OSError("reader thread did not finish"))
+        resource_failure = {
+            "kind": "orphaned_child_process",
+            "message": "父进程已退出但子进程仍持有 stdout/stderr；已清理进程组/Job。",
+        }
+        if cleanup_errors:
+            resource_failure["message"] += " 清理异常：" + ", ".join(cleanup_errors)
+    else:
+        cleanup_errors, descendants_remained = _cleanup_process_containment(
+            process, windows_job, linux_subreaper
+        )
+        if cleanup_errors:
+            resource_failure = {
+                "kind": "process_tree_cleanup_failed",
+                "message": "父进程退出后的进程树清理未完整确认："
+                + ", ".join(cleanup_errors),
+            }
+        elif descendants_remained:
+            resource_failure = {
+                "kind": "orphaned_child_process",
+                "message": "父进程已退出后仍检测到子进程；已清理进程组/Job。",
+            }
+    if windows_job is not None:
+        windows_job.close()
+    if linux_subreaper is not None:
+        linux_subreaper.close()
+    result = subprocess.CompletedProcess(
+        command, return_code, output.text("stdout"), output.text("stderr")
+    )
+    _attach_output_capture(result, output)
+    if resource_failure is not None:
+        result.resource_failure = resource_failure  # type: ignore[attr-defined]
+    return result
+
+
 def run_agent(
     command: list[str], cwd: Path, agent_env: dict[str, str] | None
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    return run_bounded_process(
         command,
         cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         env=isolated_agent_environment(cwd, agent_env),
-        timeout=600,
+        timeout=AGENT_TIMEOUT_SECONDS,
     )
 
 
@@ -437,6 +1052,8 @@ def failed_case(
     command: list[str] | None = None,
     stdout: str = "",
     stderr: str = "",
+    output_capture: dict[str, Any] | None = None,
+    resource_failure: dict[str, str] | None = None,
     workspace: Path | None = None,
     secret_values: tuple[str, ...] = (),
 ) -> dict[str, Any]:
@@ -455,6 +1072,8 @@ def failed_case(
                 "agent_exit_code": None,
                 "raw_stdout": stdout,
                 "raw_stderr": stderr,
+                "output_capture": output_capture or _fallback_output_capture(stdout, stderr),
+                "resource_failure": resource_failure,
                 "before_test_exit_code": None,
                 "after_test_exit_code": None,
                 "git_status": "",
@@ -492,6 +1111,8 @@ def evaluate_case(
             )
             diff = run(["git", "diff", "--no-ext-diff"], workspace)
             combined_output = f"{agent.stdout}\n{agent.stderr}"
+            output_capture = agent_output_capture(agent)
+            resource_failure = agent_resource_failure(agent)
             try:
                 staged_skill_unchanged = (
                     skill_artifact_sha256(staged_skill) == staged_skill_hash_before
@@ -502,6 +1123,7 @@ def evaluate_case(
             if case["mode"] == "modify":
                 checks = {
                     "agent_exit_zero": agent.returncode == 0,
+                    "agent_output_complete": resource_failure is None,
                     "fixture_red_before": before_test.returncode != 0,
                     "fixture_green_after": after_test.returncode == 0,
                     "failed_is_frontend_terminal": "['completed', 'failed']" in diff.stdout,
@@ -514,6 +1136,7 @@ def evaluate_case(
             elif case["mode"] == "read_only":
                 checks = {
                     "agent_exit_zero": agent.returncode == 0,
+                    "agent_output_complete": resource_failure is None,
                     "worktree_unchanged": not status.stdout.strip() and not diff.stdout.strip(),
                     "diagnosis_mentions_polling": bool(
                         re.search(r"轮询|poll", combined_output, re.I)
@@ -527,6 +1150,7 @@ def evaluate_case(
             else:
                 checks = {
                     "agent_exit_zero": agent.returncode == 0,
+                    "agent_output_complete": resource_failure is None,
                     "worktree_unchanged": not status.stdout.strip() and not diff.stdout.strip(),
                     "offers_recommended_result_options": bool(
                         re.search(r"推荐|建议", combined_output)
@@ -539,9 +1163,7 @@ def evaluate_case(
                     "staged_skill_unchanged": staged_skill_unchanged,
                 }
 
-            return redact_runtime_paths(
-                redact_sensitive(
-                    {
+            result = {
                         "id": case["id"],
                         "prompt": case["prompt"],
                         "mode": case["mode"],
@@ -552,14 +1174,20 @@ def evaluate_case(
                         "agent_exit_code": agent.returncode,
                         "raw_stdout": agent.stdout,
                         "raw_stderr": agent.stderr,
+                        "output_capture": output_capture,
+                        "resource_failure": resource_failure,
                         "before_test_exit_code": before_test.returncode,
                         "after_test_exit_code": after_test.returncode,
                         "git_status": status.stdout,
                         "git_diff": diff.stdout,
                     }
-                ),
-                workspace,
-                secret_values,
+            if resource_failure is not None:
+                result["error"] = {
+                    "kind": "resource_failure",
+                    "message": resource_failure["message"],
+                }
+            return redact_runtime_paths(
+                redact_sensitive(result), workspace, secret_values
             )
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout.decode("utf-8", "replace") if isinstance(exc.stdout, bytes) else exc.stdout
@@ -572,6 +1200,8 @@ def evaluate_case(
             command=command or [str(part) for part in expired_command],
             stdout=stdout or "",
             stderr=stderr or "",
+            output_capture=agent_output_capture(exc),
+            resource_failure=agent_resource_failure(exc),
             workspace=workspace,
             secret_values=secret_values,
         )
@@ -621,6 +1251,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- 修复前测试：`{case['before_test_exit_code']}`",
                 f"- 修复后测试：`{case['after_test_exit_code']}`",
                 f"- 检查：`{case['checks']}`",
+                f"- 输出采集：`{case.get('output_capture', {})}`",
                 "",
                 "```diff",
                 case["git_diff"].rstrip(),
@@ -633,6 +1264,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 def write_report(report: dict[str, Any], output_dir: Path, prefix: str) -> None:
     report = redact_sensitive(report)
+    prefix = validate_report_prefix(prefix)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / f"{prefix}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
@@ -938,6 +1570,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     configure_utf8_stdio()
     args = parse_args()
+    if hasattr(args, "report_prefix"):
+        try:
+            args.report_prefix = validate_report_prefix(args.report_prefix)
+        except ValueError as error:
+            print(f"报告前缀无效：{error}", file=sys.stderr)
+            return 1
     if args.self_test:
         return self_test()
     if args.verify_record:

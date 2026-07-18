@@ -22,6 +22,30 @@ SPEC.loader.exec_module(MATRIX)
 
 
 class ClientMatrixTest(unittest.TestCase):
+    def test_report_prefix_is_a_safe_file_name_only(self) -> None:
+        self.assertEqual(MATRIX.HARNESS.validate_report_prefix("matrix-2026.07"), "matrix-2026.07")
+        with tempfile.TemporaryDirectory(prefix="pdo-prefix-") as temp:
+            report = {
+                "generated_at": "2026-07-18T00:00:00+00:00",
+                "mode": "probe_only",
+                "status": "NOT_RUN",
+                "skill": {"sha256": "a" * 64},
+                "probes": [],
+                "runs": [],
+            }
+            for unsafe in ("", ".hidden", "..", "report..old", "../escape", "nested/report", r"nested\\report", r"C:\\report"):
+                with self.subTest(unsafe=unsafe):
+                    with self.assertRaisesRegex(ValueError, "report-prefix"):
+                        MATRIX.write_report(report, Path(temp), unsafe)
+
+    def test_execution_prefix_reserves_space_for_profile_suffix(self) -> None:
+        profiles = [{"id": "codex-cli"}]
+        self.assertEqual(
+            MATRIX.validate_execution_report_prefix("matrix", profiles), "matrix"
+        )
+        with self.assertRaisesRegex(ValueError, "report-prefix"):
+            MATRIX.validate_execution_report_prefix("a" * 128, profiles)
+
     def test_default_profiles_are_complete_and_use_isolated_placeholders(self) -> None:
         profiles = MATRIX.load_profiles(PROFILE_PATH)
         self.assertEqual(set(profiles), {"codex-cli", "claude-code", "gemini-cli"})

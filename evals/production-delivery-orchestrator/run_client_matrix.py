@@ -124,28 +124,50 @@ def probe_profile(profile: dict[str, Any]) -> dict[str, Any]:
     if executable is None:
         return {**base, "status": "UNAVAILABLE", "message": f"找不到命令: {command[0]}"}
     try:
-        completed = subprocess.run(
+        completed = HARNESS.run_bounded_process(
             command,
-            check=False,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+            cwd=Path.cwd(),
             timeout=30,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except subprocess.TimeoutExpired as error:
+        return {
+            **base,
+            "status": "PROBE_FAILED",
+            "message": "本地 CLI 探测超时；进程树已请求清理。",
+            "output_capture": HARNESS.agent_output_capture(error),
+            "resource_failure": HARNESS.agent_resource_failure(error)
+            or {"kind": "timeout", "message": "本地 CLI 探测超时"},
+        }
+    except OSError as error:
         return {
             **base,
             "status": "PROBE_FAILED",
             "message": HARNESS.redact_text(f"{type(error).__name__}: {error}"),
+            "resource_failure": {
+                "kind": "process_start_error",
+                "message": "本地 CLI 探测进程无法启动",
+            },
         }
+    output_capture = HARNESS.agent_output_capture(completed)
+    resource_failure = HARNESS.agent_resource_failure(completed)
     output = (completed.stdout or completed.stderr).strip()
+    if resource_failure is not None:
+        return {
+            **base,
+            "status": "PROBE_FAILED",
+            "exit_code": completed.returncode,
+            "output": HARNESS.redact_text(output),
+            "output_capture": output_capture,
+            "resource_failure": resource_failure,
+            "message": "本地 CLI 探测输出不完整；未执行真实 Agent。",
+        }
     if completed.returncode != 0:
         return {
             **base,
             "status": "PROBE_FAILED",
             "exit_code": completed.returncode,
             "output": HARNESS.redact_text(output),
+            "output_capture": output_capture,
         }
     match = SEMVER_RE.search(output)
     actual_version = match.group(1) if match else None
@@ -155,6 +177,7 @@ def probe_profile(profile: dict[str, Any]) -> dict[str, Any]:
             "status": "VERSION_MISMATCH",
             "exit_code": completed.returncode,
             "output": HARNESS.redact_text(output),
+            "output_capture": output_capture,
             "actual_version": actual_version,
             "message": "本机版本与经核对的 profile 不一致；先复核 CLI 参数再执行真实样本。",
         }
@@ -163,6 +186,7 @@ def probe_profile(profile: dict[str, Any]) -> dict[str, Any]:
         "status": "AVAILABLE",
         "exit_code": completed.returncode,
         "output": HARNESS.redact_text(output),
+        "output_capture": output_capture,
         "actual_version": actual_version,
     }
 
@@ -173,12 +197,13 @@ def execute_profile(
     report_prefix: str,
     agent_env: dict[str, str],
 ) -> dict[str, Any]:
+    report_prefix = HARNESS.validate_report_prefix(report_prefix)
     profile_args = argparse.Namespace(
         client=profile["client"],
         model="unknown (client profile does not infer the model)",
         configuration=profile["configuration"],
         output_dir=output_dir,
-        report_prefix=f"{report_prefix}-{profile['id']}",
+        report_prefix=HARNESS.validate_report_prefix(f"{report_prefix}-{profile['id']}"),
     )
     result = HARNESS.run_suite(profile_args, profile["agent_command"], agent_env)
     report_path = output_dir / f"{profile_args.report_prefix}.json"
@@ -196,6 +221,17 @@ def execute_profile(
         "exit_code": result,
         "report": report_path.name,
     }
+
+
+def validate_execution_report_prefix(
+    report_prefix: str, profiles: list[dict[str, Any]]
+) -> str:
+    """Validate the base prefix and every per-profile report name before execution."""
+
+    report_prefix = HARNESS.validate_report_prefix(report_prefix)
+    for profile in profiles:
+        HARNESS.validate_report_prefix(f"{report_prefix}-{profile['id']}")
+    return report_prefix
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -228,6 +264,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def write_report(report: dict[str, Any], output_dir: Path, prefix: str) -> None:
+    prefix = HARNESS.validate_report_prefix(prefix)
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_report = HARNESS.redact_sensitive(report)
     (output_dir / f"{prefix}.json").write_text(
@@ -273,12 +310,17 @@ def main() -> int:
     HARNESS.configure_utf8_stdio()
     args = parse_args()
     try:
+        args.report_prefix = HARNESS.validate_report_prefix(args.report_prefix)
         profiles = load_profiles(args.profiles)
         selected_ids = args.clients or list(profiles)
         unknown = [profile_id for profile_id in selected_ids if profile_id not in profiles]
         if unknown:
             raise ValueError(f"未知 profile: {', '.join(unknown)}")
         selected = [profiles[profile_id] for profile_id in selected_ids]
+        if args.execute:
+            args.report_prefix = validate_execution_report_prefix(
+                args.report_prefix, selected
+            )
     except ValueError as error:
         print(json.dumps({"status": "FAIL", "error": str(error)}, ensure_ascii=False))
         return 1

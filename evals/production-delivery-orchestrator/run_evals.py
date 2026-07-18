@@ -30,6 +30,24 @@ DEFAULT_BASELINE_GIT_REF = "b3d9a17"
 DEFAULT_SKILL_RELATIVE_PATH = "skills/production-delivery-orchestrator"
 LEGACY_SYSTEM_PROMPT = "references/system-prompt.md"
 REFERENCE_LINK_PATTERN = r"references/[A-Za-z0-9_.\-/]+\.md"
+REPORT_PREFIX_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+
+
+def validate_report_prefix(prefix: str) -> str:
+    """Allow only a single portable report filename prefix."""
+
+    if (
+        not isinstance(prefix, str)
+        or not REPORT_PREFIX_RE.fullmatch(prefix)
+        or ".." in prefix
+        or "/" in prefix
+        or "\\" in prefix
+    ):
+        raise ValueError(
+            "report-prefix 必须是纯安全文件名前缀：以字母或数字开头，"
+            "只可包含字母、数字、._-，且不得包含 .. 或路径分隔符"
+        )
+    return prefix
 
 
 def _portable_pure_path(path: str | Path) -> PurePosixPath | PureWindowsPath:
@@ -1097,6 +1115,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    try:
+        args.report_prefix = validate_report_prefix(args.report_prefix)
+    except ValueError as error:
+        print(f"评测基础设施错误：{error}", file=sys.stderr)
+        return 2
     if args.self_test:
         return run_self_test(args)
 
