@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "skill": "production-delivery-orchestrator",
-  "version": "1.5.0",
-  "tag": "v1.5.0",
-  "title": "v1.5.0｜新鲜证据完成门与最小实验",
-  "previous_release": "v1.4.1",
-  "release_notes": "docs/releases/v1.5.0.md",
+  "version": "1.6.0",
+  "tag": "v1.6.0",
+  "title": "v1.6.0｜发布门、进程边界与制品验证加固",
+  "previous_release": "v1.5.0",
+  "release_notes": "docs/releases/v1.6.0.md",
   "source_date": "2026-07-18",
   "compatibility": {
     "native_targets": [

@@ -1,5 +1,60 @@
 # Workflow Status
 
+## 当前 v1.6.0 发布闭环（2026-07-18）
+
+- 目标：将 P0/P1 加固作为 `v1.6.0` 版本提交、推送、annotated tag 和 GitHub Release 发布；以新鲜远端 CI、下载制品/provenance/attestation、tagged 发现和真实 Agent CLI 样本完成最终闭环。
+- 授权：用户明确授权本地 commit、push、tag、GitHub Actions/Release、资产下载与 attestation 复验、真实 Agent CLI。历史 tag 永不移动。
+
+| ID | 节点 | 状态 | 验收 |
+|---|---|---|---|
+| R1 | 版本化元数据和本地 release gate | in progress | metadata/README/release note 一致，当前代码通过完整本地套件和基于待发布 commit 的制品复验 |
+| R2 | 分主题 commit 与 main push | pending | main 可见、工作树仅含预期发布回填变更 |
+| R3 | `v1.6.0` tag 和 GitHub Release | pending | 双 OS quality 成功，publish 在 `needs: quality` 后成功，附件齐全且 tag 绑定 release commit |
+| R4 | 下载与供应链复验 | pending | checksum、provenance、`--expected-commit`、GitHub attestation、tagged `npx skills --list` 均实际通过 |
+| R5 | 真实 Agent CLI 证据 | pending | 在隔离临时 fixture 中执行，不泄露凭据，报告区分真实/合成并绑定 v1.6.0 artifact |
+
+- 不得宣布发布完成，直到 R1–R5 均有新鲜结果；若 CLI/远端权限、配额或网络失败，保留精确失败证据和可重试步骤。
+
+## 当前 P0/P1 实施闭环（2026-07-18，基线 HEAD `eb3bf18`）
+
+- 目标：将已批准路线图中的 Release 质量前置、forward runner 资源/路径边界、Release ZIP 验证资源边界真实实现并复验；同时补齐可自动化的 CI 差异和供应链治理。
+- 已授权：本仓库内代码、测试、工作流和文档的最小相关修改及本地验证。
+- 未授权：推送、创建 tag/Release、修改远端仓库设置、真实付费/订阅 Agent 调用、全局安装和生产写入。它们是最终发布前的外部授权门，不得由本轮本地 PASS 冒充。
+- 并发约束：主线程唯一更新本文件和整合文档；子代理只修改自己拥有的文件集合，不回退他人改动。
+
+| ID | 节点/所有者 | 状态 | 文件所有权 | 验收标准 |
+|---|---|---|---|---|
+| I1 | Release/CI 门 | passed | `.github/workflows/release.yml`、`.github/workflows/skill-evals.yml`、CI 测试/文档（若必要） | 同工作流双 OS quality → `publish.needs: quality`；PR/push diff 范围与治理/凭据静态检查 `6/6` 通过 |
+| I2 | Forward runner 加固 | passed | `evals/production-delivery-orchestrator/run_forward_tests.py`、`run_evals.py`、`run_client_matrix.py` 及其 `tests/` | Windows 49 项：47 PASS、2 Linux skip；Ubuntu WSL `setsid` 脱组 child/grandchild 回归 2/2 PASS；timeout/持管道/关闭管道孤儿与 matrix suffix prefix 边界均有负向验证 |
+| I3 | Release ZIP 验证加固 | passed | `release/build_release.py`、`release/tests/test_build_release.py` | 成员数/单文件/总量/压缩比和分块读取负向测试；release builder `7/7` 通过 |
+| I4 | 主线程集成与证据 | passed | `workflow_status.md`、README/docs 与全仓验证 | Windows `6/6`、`25/25`、`47 PASS + 2 Linux skip`、`7/7`，Ubuntu WSL Linux 专用回归 `2/2`，以及 self-test、candidate/known-bad、release verify、compile、`git diff --check` 均有新鲜证据 |
+| I5 | 独立代码审查与复验 | passed | 只读，无文件所有权 | 最终独立 Critic 六维 PASS，P0/P1 均为 0；Linux child/grandchild、Windows Job、Release gate、路径和 ZIP 边界均已复验 |
+
+- 完成定义：I1–I5 全部通过，自动化测试覆盖新增负向路径；代码无未解释的行为回退；未授权外部动作明确列为待授权门。
+
+- 本轮结论：I1–I5 已完成，P0/P1 本地实施闭环获独立 Critic PASS。未执行的 GitHub Actions、tag/Release、attestation 下载复验和真实 Agent CLI 仍是外部授权门，不得解释为已完成发布。
+
+## 当前对标复核与交付工作流（2026-07-18，当前 HEAD `eb3bf18`）
+
+- 目标：基于当前主项目和 `C:\Users\Administrator.DESKTOP-EGNE9ND\.claude\skills` 的实时快照，重新识别项目边界、筛选可迁移的参考实践、验证本地质量门，并在独立六维 Critic 复验后交付；不将 2026-07-17 的分析快照或历史 Release 结论冒充为本轮结论。
+- 授权与边界：本轮授权为只读扫描、分析文档和工作流状态更新、以及无外部副作用的本地验证。主项目功能代码、依赖、发布、推送、tag、GitHub Release、真实付费模型调用和全局安装均不在本轮范围；代码改造须待路线图获得用户确认。
+- 主线程：唯一写入者，负责状态、分析结论、依赖串行化和最终验收；子代理只读并回传证据，避免共享工作区冲突。
+
+| ID | 节点 | 状态 | 依赖 | 验收依据 | 当前证据 |
+|---|---|---|---|---|---|
+| B1 | 主项目事实盘点 | passed | - | 类型、入口、模块、测试、部署、配置与边界均可定位 | 当前 HEAD、入口/CI/元数据静态盘点；结论写入 `docs/project-benchmark-revalidation-2026-07-18.md` |
+| B2 | 参考根递归筛选 | passed | - | 区分可执行项目、文档型技能、嵌套 Git 与缺失实现目录；完成排序 | 独立只读 Scan Agent：`agent-registry`、`ae-ltd-skill-builder`、`workflow-orchestration` 为前三候选 |
+| B3 | 工程质量与安全审计 | passed | B1 | 证实 P0/P1/P2、测试/配置/路径/供应链/发布风险和可执行门禁 | 独立只读 Quality Agent 的**严重度**为无 P0、3 个 P1、5 个 P2；路线图另将 Release gate 提升为下一次 Release 前的 P0 交付优先级，非安全严重度冲突 |
+| B4 | 当前本地回归验证 | passed | B1 | 适用单测、release builder、eval 和 forward synthetic 自检均以当前工作树执行 | 2026-07-18：安装/盘点 `25/25`，release builder `5/5`，eval/forward/matrix `39/39`；两个 self-test 均 PASS |
+| B5 | 当前分析与路线图归并 | passed | B1,B2,B3,B4 | 1–9 输出、迁移分类、兼容/回滚和缺失信息明确 | `docs/project-benchmark-revalidation-2026-07-18.md`；旧快照已显式降格 |
+| B6 | 独立六维 Critic | passed | B5 | 需求完整性、逻辑、边界、质量、测试覆盖、实际运行各自有结论；P0/P1 关闭或明确阻塞 | 独立只读 Critic 复验 PASS；本批 3 个文档 P1 已关闭，代码路线图风险已明确保留 |
+
+- 完成条件：B1–B6 完成，所有结论绑定当前 HEAD 或明确标注历史/未验证；若 Critic 发现可在文档范围内关闭的问题，主线程最小修复后由同一 Critic 复验。代码改造并不因分析通过而自动开始。
+
+- 本轮结论：B1–B6 已完成，当前分析/状态文档获独立六维 Critic PASS。下一节点不是自动编码，而是等待用户选择 P0，或 P0+P1 的代码改造授权；Release、推送、tag 和外部真实 Agent 执行仍须另行授权。
+
+> **历史分界。** 以下所有 release 契约、节点、验证台账和“当前”措辞均是产生当日的历史记录，不是本轮 current-state；本轮唯一 current-state 以本文件顶部 B1–B6 看板和 `docs/project-benchmark-revalidation-2026-07-18.md` 为准。
+
 ## 当前证据完成门与最小实验发布契约（2026-07-18，目标 v1.5.0）
 
 - 目标：将 L1/L2/L3 新鲜证据完成门和“单一假设、最小实验、保留反证”的诊断循环做成跨 CLI 的按需能力；低风险不被过度测试，诊断也不因单一假设过早收敛。

@@ -1,4 +1,6 @@
-# Agent Skills Code OP 项目识别、参考对标与优化实施报告
+# Agent Skills Code OP 项目识别、参考对标与优化实施报告（历史快照）
+
+> 本文记录的是 2026-07-17 / v1.1.0 阶段的对标结论，不是当前版本事实。当前工作树、v1.5.0 版本、测试计数、参考候选和代码级路线图以 [2026-07-18 当前复核报告](project-benchmark-revalidation-2026-07-18.md) 为准；请勿将本文的“当前”措辞外推到后续 Release。
 
 主项目：`C:\Users\Administrator.DESKTOP-EGNE9ND\Desktop\全能skills\Agent-skills-code-op-repo`
 
