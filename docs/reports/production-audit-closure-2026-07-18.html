@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>生产审计交接报告 · 2026-07-18</title>
+  <style>
+    :root { --ink: #18232d; --paper: #f8f4eb; --panel: #fffdf8; --line: #d9d0c1; --accent: #0a6d62; --danger: #a13635; --muted: #52616d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--paper); font: 17px/1.65 Georgia, "Noto Serif SC", serif; }
+    header, main, footer { width: min(980px, calc(100% - 2rem)); margin: auto; }
+    header { padding: 4.5rem 0 2.5rem; border-bottom: 4px solid var(--ink); }
+    .eyebrow { margin: 0 0 .4rem; color: var(--accent); font: 700 .78rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { max-width: 17ch; margin: 0; font-size: clamp(2.4rem, 7vw, 5.6rem); line-height: .94; letter-spacing: -.055em; }
+    h2 { margin-top: 3.2rem; font-size: clamp(1.45rem, 3vw, 2.2rem); line-height: 1.1; }
+    h3 { margin-bottom: .3rem; font-size: 1.05rem; }
+    p, li { max-width: 74ch; }
+    .lede { max-width: 63ch; margin: 1.4rem 0 0; color: var(--muted); font-size: 1.14rem; }
+    nav { display: flex; flex-wrap: wrap; gap: .45rem .9rem; margin-top: 1.8rem; font: .82rem/1.3 ui-monospace, Consolas, monospace; }
+    a { color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: .16em; }
+    a:focus, button:focus, input:focus { outline: 3px solid #f2b65d; outline-offset: 3px; }
+    .callout, .fact, .question { border: 1px solid var(--line); background: var(--panel); }
+    .callout { padding: 1rem 1.15rem; border-left: 6px solid var(--accent); }
+    .callout strong { color: var(--accent); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .85rem; margin: 1.2rem 0; }
+    .fact { padding: 1rem; }
+    .fact strong { display: block; color: var(--accent); font: .75rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: .07em; text-transform: uppercase; }
+    .workflow { display: grid; grid-template-columns: repeat(7, minmax(90px, 1fr)); gap: .35rem; overflow-x: auto; padding-bottom: .5rem; }
+    .workflow span { min-width: 100px; padding: .75rem .55rem; color: #fff; background: var(--ink); font: 700 .72rem/1.2 ui-monospace, Consolas, monospace; text-align: center; }
+    .workflow span:nth-child(2n) { background: var(--accent); }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .92rem; }
+    th, td { padding: .7rem .55rem; vertical-align: top; border-bottom: 1px solid var(--line); text-align: left; }
+    th { font: 700 .75rem/1.2 ui-monospace, Consolas, monospace; letter-spacing: .06em; text-transform: uppercase; }
+    .question { margin: .9rem 0; padding: 1rem; }
+    .question.correct { border-left: 5px solid var(--accent); }
+    .question.incorrect { border-left: 5px solid var(--danger); }
+    .question legend { padding: 0 .25rem; font-weight: 700; }
+    label { display: block; margin: .45rem 0; }
+    button { margin: .6rem .55rem .2rem 0; padding: .65rem .9rem; color: #fff; border: 0; background: var(--ink); cursor: pointer; font: 700 .88rem/1 ui-monospace, Consolas, monospace; }
+    button.secondary { color: var(--ink); border: 1px solid var(--ink); background: transparent; }
+    #quiz-result { min-height: 2em; margin: 1rem 0; font-weight: 700; }
+    .quiz-feedback { margin: .8rem 0 0; padding: .7rem; color: #642121; background: #fff0ed; font: .9rem/1.5 ui-monospace, Consolas, monospace; }
+    footer { margin-top: 3.5rem; padding: 1.5rem 0 3rem; color: var(--muted); border-top: 1px solid var(--line); font-size: .9rem; }
+    @media (max-width: 620px) { body { font-size: 16px; } header { padding-top: 2.6rem; } table { display: block; overflow-x: auto; } }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">handoff / audit closure / 2026-07-18</p>
+    <h1>把“看起来能用”压缩成可核验的事实</h1>
+    <p class="lede">这是给下一位维护者的交接报告，不是宣传页。它区分已运行的证据、已修复的缺陷、仍受外部条件限制的真实 Agent 行为，以及下一次新增 API 或功能时应复用的工作流。</p>
+    <nav aria-label="报告目录">
+      <a href="#context">上下文</a><a href="#changes">改了什么</a><a href="#workflow">工作流</a><a href="#evidence">证据</a><a href="#limits">边界</a><a href="#quiz">测验</a>
+    </nav>
+  </header>
+  <main>
+    <section id="context">
+      <h2>1. 上下文与直觉</h2>
+      <p>该仓库是一个 Python 标准库实现的 Agent Skill 分发、安装、离线评测和 Release 工程；它不是 Web/SaaS 应用。因此，本轮没有凭空添加前端页面、数据库、API、支付或容器。真正要保护的用户旅程是：发现 Skill → 安装到指定目录 → 读取按需契约 → 离线评测或受控真实 CLI → 双平台质量门 → 可验证的 Release。</p>
+      <div class="callout"><strong>核心判断：</strong>对这种仓库最危险的不是“缺一个酷炫框架”，而是历史事实冒充当前事实、安装器在 Windows 上不可读、浅克隆评测无恢复路径，以及把静态分数误称为真实 Agent 行为。</div>
+      <div class="grid">
+        <article class="fact"><strong>Stable release</strong><span><code>v1.7.0</code> 保持不可变；本轮工作位于 <code>001-production-audit</code>。</span></article>
+        <article class="fact"><strong>Architecture</strong><span>单 Skill、Python 3.11 CI、stdlib-only、GitHub Actions 双平台质量门。</span></article>
+        <article class="fact"><strong>Truth boundary</strong><span>静态 eval、安装和图谱不等于真实模型/客户端行为。</span></article>
+      </div>
+    </section>
+
+    <section id="changes">
+      <h2>2. 实际补齐的内容</h2>
+      <table>
+        <thead><tr><th>问题</th><th>处理</th><th>为什么重要</th></tr></thead>
+        <tbody>
+          <tr><td>文档错误地否认多目标安装事务，历史评审也容易被当成当前结论。</td><td>修正关注点、标出历史归档，并用 current-state 回归断言锁定边界。</td><td>避免维护者基于错误的故障模型改坏 installer。</td></tr>
+          <tr><td>Windows 非 UTF-8 控制台下中文帮助不可读。</td><td>安装器增加受保护的 UTF-8 console 配置，并加入回归测试。</td><td>让调用者拿到可操作的错误/帮助，而不是乱码。</td></tr>
+          <tr><td>默认 eval 在浅克隆或 Source archive 中晚失败、恢复不清楚。</td><td>提前 fail-closed，exit 2 明确要求完整历史或显式 <code>--baseline</code>。</td><td>不再静默拿错误基线比较候选。</td></tr>
+          <tr><td>长任务容易把旧报告和旧测试当作今日事实。</td><td>新增可复用的 maintenance contract，要求先读规则/当前文档/状态、核对 Git 与证据新鲜度，再编码。</td><td>把“先思考后编码”变成可复查的执行契约。</td></tr>
+          <tr><td>用户无法快速理解本轮边界。</td><td>新增本报告、需求矩阵、工具适用性审计、威胁模型和测试台账。</td><td>下次变更能从事实、验收、风险与回滚点继续，而不是从聊天记录猜。</td></tr>
+        </tbody>
+      </table>
+      <p>详细需求映射见 <a href="../audits/2026-07-18-requirements-matrix.md">需求追踪矩阵</a>；主线程的最强反驳见 <a href="../audits/2026-07-18-adversarial-self-review.md">反向审判</a>；技术支持范围见 <a href="../support-matrix.json">机器可读支持矩阵</a>。</p>
+    </section>
+
+    <section id="workflow">
+      <h2>3. 下次新增 API 或功能时怎样复用</h2>
+      <div class="workflow" aria-label="交付状态机"><span>DISCOVER</span><span>ALIGN</span><span>PLAN</span><span>EXECUTE</span><span>VALIDATE</span><span>REVIEW</span><span>CLOSE</span></div>
+      <ol>
+        <li>先读取项目规则、<a href="../current-state.md">current-state</a>、活动规格和 <a href="../../workflow_status.md">workflow_status</a>，再用 Git/代码/命令确认哪些事实仍新鲜。</li>
+        <li>将需求拆成有依赖、验收、证据和回滚点的节点；只有文件不重叠且无顺序依赖时才并行。</li>
+        <li>修改前先让缺陷重现或建立等价反证；修改后按风险跑单元、接缝、安装、release 或真实客户端验证。</li>
+        <li>让独立只读 Critic 从需求完整性、逻辑、边界、代码质量、测试覆盖和实际运行六维挑战结果；修复后再复验。</li>
+      </ol>
+      <p>具体规则在 <a href="../../skills/production-delivery-orchestrator/references/maintenance-contract.md">maintenance contract</a>；它明确禁止把历史、mock、静态 eval 或安装成功包装成当前真实运行。</p>
+    </section>
+
+    <section id="evidence">
+      <h2>4. 已有证据与验收口径</h2>
+      <ul>
+        <li>Spec Kit constitution、规格、计划、任务和需求追踪已落在仓库中，而不是只存在于会话。</li>
+        <li>本机 CodeGraph 已真实索引 27 个代码文件、773 个节点和 1,286 条边，并查询到 <code>InstallTransaction</code> 及其事务方法；它提供导航证据，不替代运行正确性。</li>
+        <li>已按 TDD 先运行新合同/报告测试并得到预期红灯，再实现对应文件；最终结果以 <a href="../audits/2026-07-18-test-ledger.md">测试台账</a> 的本轮命令为准。</li>
+        <li>发布质量门要求 `publish` 依赖双平台 quality；稳定 tag 没有被移动。当前事实由 <a href="../current-state.md">current-state</a> 而非历史 Release 报告定义。</li>
+        <li>安全分析覆盖安装目录、ZIP、外部 CLI 配置、凭证和 Release 供应链，见 <a href="../audits/2026-07-18-threat-model.md">威胁模型</a>。</li>
+      </ul>
+    </section>
+
+    <section id="limits">
+      <h2>5. 仍然不能伪称完成的边界</h2>
+      <div class="callout"><strong>真实跨 CLI 行为仍是 partial。</strong>Codex 的 hardened runner 已有 3/3 真实样本；Claude 本机 OAuth 没有可用模型；Gemini 没有隔离 API/Vertex 凭证。因此离线评测、CLI probe 和安装结果不能写成“三客户端已通过”。</div>
+      <ul>
+        <li>Understand Anything 的固定版本已安装并构建，但其 `.ua` 图谱生成尝试被 Windows sandbox 的 <code>os error 206</code> 阻断；没有把它当成代码正确性证明。独立的本机 CodeGraph 索引已可用于导航，但同样不等于行为验证。</li>
+        <li>Figma、前端设计、MCP Server、Composio 等能力在本仓库没有真实输入或产品面；本轮仅如实评估其适用性，未制造无用依赖。</li>
+        <li>任何新 tag、push、发布、真实模型调用或外部 OAuth 行为都需要重新获得对应环境结果，并遵循 release 过程。</li>
+      </ul>
+    </section>
+
+    <section id="quiz">
+      <h2>6. 交接测验（通过线：至少答对 4 / 5 题）</h2>
+      <p>答完后点击评分。错误题会保留在页面上，并显示正确答案，方便把报告真正读懂。</p>
+      <form id="quiz-form">
+        <fieldset class="question" data-correct="b" data-explanation="仓库的运行边界是安装、评测和 Release，不存在多租户 Web 运行时。"><legend>1. 这个仓库的主要产品形态是什么？</legend><label><input type="radio" name="q1" value="a"> 一个多租户 Web SaaS。</label><label><input type="radio" name="q1" value="b"> 一个 Skill 的分发、安装、评测与 Release 工程。</label><label><input type="radio" name="q1" value="c"> 一个 MCP 数据库服务。</label></fieldset>
+        <fieldset class="question" data-correct="c" data-explanation="默认 baseline 是历史 Git commit；不能用当前候选替代它，否则比较失去意义。"><legend>2. 浅克隆运行默认 eval 的正确恢复方式是什么？</legend><label><input type="radio" name="q2" value="a"> 让它把当前候选当 baseline。</label><label><input type="radio" name="q2" value="b"> 跳过 known-bad 比较。</label><label><input type="radio" name="q2" value="c"> 获取包含默认 commit 的历史，或显式传入可用的 <code>--baseline</code>。</label></fieldset>
+        <fieldset class="question" data-correct="a" data-explanation="离线评测是规则和行为代理，不会启动真实模型或客户端。"><legend>3. 为什么不能把 offline eval 100 分写成跨客户端 Agent 已通过？</legend><label><input type="radio" name="q3" value="a"> 它只是静态/行为代理证据，不能替代真实模型与客户端执行。</label><label><input type="radio" name="q3" value="b"> 因为任何测试都没有价值。</label><label><input type="radio" name="q3" value="c"> 因为 Release 永远不需要测试。</label></fieldset>
+        <fieldset class="question" data-correct="b" data-explanation="先核验规则、当前状态和 Git/代码证据，才能避免把历史结论当成当前事实。"><legend>4. 长期维护开始编码前，maintenance contract 的首要要求是什么？</legend><label><input type="radio" name="q4" value="a"> 先引入新框架。</label><label><input type="radio" name="q4" value="b"> 先读规则、当前状态和计划，再以 Git/代码/命令核验事实是否过时。</label><label><input type="radio" name="q4" value="c"> 先删除旧文档。</label></fieldset>
+        <fieldset class="question" data-correct="c" data-explanation="缺少模型权限或隔离凭证只说明未完成真实运行，不说明 Skill 通过或损坏。"><legend>5. 当前 Claude/Gemini 的真实 CLI 状态应如何表达？</legend><label><input type="radio" name="q5" value="a"> 已通过，因为安装器和 probe 可运行。</label><label><input type="radio" name="q5" value="b"> 已失败，说明 Skill 一定损坏。</label><label><input type="radio" name="q5" value="c"> partial：Claude 没有可用模型，Gemini 没有隔离凭证，尚无技能行为结论。</label></fieldset>
+        <button id="grade-quiz" type="button">评分</button><button id="reset-quiz" class="secondary" type="reset">重做</button>
+        <p id="quiz-result" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+  <footer>本报告是可版本化的仓库交接材料。若版本、CLI、测试、发布或外部凭证状态变化，请先更新事实与台账，再复用其中的结论。</footer>
+  <script>
+    (() => {
+      const quiz = document.querySelector("#quiz-form");
+      const result = document.querySelector("#quiz-result");
+      const requiredToPass = 4;
+      document.querySelector("#grade-quiz").addEventListener("click", () => {
+        const questions = [...quiz.querySelectorAll(".question")];
+        let correct = 0;
+        let questionNumber = 0;
+        const corrections = [];
+        for (const question of questions) {
+          questionNumber += 1;
+          const selected = question.querySelector("input:checked");
+          const isCorrect = selected?.value === question.dataset.correct;
+          question.classList.toggle("correct", isCorrect);
+          question.classList.toggle("incorrect", !isCorrect);
+          if (isCorrect) {
+            correct += 1;
+            question.querySelector(".quiz-feedback")?.remove();
+          } else {
+            const correctInput = question.querySelector(`input[value="${question.dataset.correct}"]`);
+            const correctLabel = correctInput?.closest("label")?.innerText.trim() ?? "未找到正确选项";
+            const feedbackMessage = `正确答案：${correctLabel}。说明：${question.dataset.explanation ?? "请复核本报告对应章节。"}`;
+            let feedback = question.querySelector(".quiz-feedback");
+            if (!feedback) {
+              feedback = document.createElement("p");
+              feedback.className = "quiz-feedback";
+              feedback.setAttribute("role", "status");
+              question.append(feedback);
+            }
+            feedback.textContent = feedbackMessage;
+            corrections.push(`第 ${questionNumber} 题：${feedbackMessage}`);
+          }
+        }
+        result.textContent = correct >= requiredToPass
+          ? `通过：${correct} / ${questions.length}。你已经掌握本次变更的核心边界。`
+          : `未通过：${correct} / ${questions.length}。正确答案：${corrections.join("；")}。请复核标红题目和第 1–5 节后再试。`;
+      });
+      document.querySelector("#reset-quiz").addEventListener("click", () => {
+        for (const question of quiz.querySelectorAll(".question")) {
+          question.classList.remove("correct", "incorrect");
+          question.querySelector(".quiz-feedback")?.remove();
+        }
+        result.textContent = "";
+      });
+    })();
+  </script>
+</body>
+</html>

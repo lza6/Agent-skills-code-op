@@ -77,6 +77,39 @@ class InstallSkillIntegrationTest(unittest.TestCase):
         )
         return transaction.journal_path
 
+    def test_configure_console_utf8_reconfigures_standard_streams_when_supported(self) -> None:
+        installer = load_installer_module()
+        stdout = mock.Mock()
+        stderr = mock.Mock()
+
+        with (
+            mock.patch.object(installer.sys, "stdout", stdout),
+            mock.patch.object(installer.sys, "stderr", stderr),
+        ):
+            installer.configure_console_utf8()
+
+        stdout.reconfigure.assert_called_once_with(
+            encoding="utf-8", errors="backslashreplace"
+        )
+        stderr.reconfigure.assert_called_once_with(
+            encoding="utf-8", errors="backslashreplace"
+        )
+
+    def test_configure_console_utf8_tolerates_unconfigurable_streams(self) -> None:
+        installer = load_installer_module()
+        stdout = mock.Mock(reconfigure=mock.Mock(side_effect=ValueError("closed")))
+        stderr = object()
+
+        with (
+            mock.patch.object(installer.sys, "stdout", stdout),
+            mock.patch.object(installer.sys, "stderr", stderr),
+        ):
+            installer.configure_console_utf8()
+
+        stdout.reconfigure.assert_called_once_with(
+            encoding="utf-8", errors="backslashreplace"
+        )
+
     def test_dry_run_does_not_create_project_or_installation_files(self) -> None:
         with tempfile.TemporaryDirectory(prefix="pdo-dry-run-test-") as temp:
             project = Path(temp) / "not-created"

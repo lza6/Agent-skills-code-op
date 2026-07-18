@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "scope": "tested automation compatibility, not a claim of all-model behavioral compatibility",
+  "runtime": {
+    "python": {
+      "tested_versions": [
+        "3.11"
+      ],
+      "required_for": [
+        "installer",
+        "offline-evaluator",
+        "release-builder",
+        "CI"
+      ]
+    },
+    "operating_systems": {
+      "ci_tested": [
+        "ubuntu-latest",
+        "windows-latest"
+      ],
+      "consumer_documented": [
+        "macOS"
+      ]
+    },
+    "git": {
+      "required_for_default_evaluation": true,
+      "required_for_release_provenance": true
+    }
+  },
+  "evaluation": {
+    "default_git_baseline": {
+      "ref": "b3d9a17",
+      "requires_full_history": true,
+      "unavailable_behavior": "exit 2 with shallow-clone/source-archive diagnosis",
+      "recovery": [
+        "fetch repository history containing the declared ref",
+        "pass --baseline <skill-dir-or-SKILL.md>"
+      ]
+    },
+    "evidence_limits": [
+      "offline evaluator is static and behavior-proxy evidence only",
+      "real-agent matrix result applies only to the recorded client, model access and fixture"
+    ]
+  },
+  "client_profiles": {
+    "codex": {
+      "observed_version": "0.144.5",
+      "latest_recorded_real_fixture_status": "3/3 PASS"
+    },
+    "claude_code": {
+      "observed_version": "2.1.212",
+      "latest_recorded_real_fixture_status": "partial: host OAuth account had no usable model"
+    },
+    "gemini_cli": {
+      "latest_recorded_real_fixture_status": "partial: no isolated API/Vertex credential"
+    }
+  },
+  "freshness": {
+    "update_when": [
+      "CI runtime matrix changes",
+      "default baseline ref changes",
+      "client profile command or evidence changes",
+      "new release changes the compatibility contract"
+    ],
+    "current_facts": "docs/current-state.md"
+  }
+}

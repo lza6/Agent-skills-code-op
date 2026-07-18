@@ -15,6 +15,7 @@
 - [参考技能库扫描、去重与候选评分](docs/reference-scan-report.md)
 - [独立 Critic 六维审查与复验](reviews/final-critic.md)
 - [持久工作流状态](workflow_status.md)
+- [机器可读支持矩阵](docs/support-matrix.json)
 
 参考根目录规模很大：日常 `rg` 可发现口径为 13,018 个 `SKILL.md`，结构扫描还包含隐藏、符号链接和聚合目录。仓库没有平均拼接全部规则，而是按业务相似度、架构价值、工程成熟度和可迁移性筛选高价值候选。
 
@@ -453,7 +454,7 @@ python evals\production-delivery-orchestrator\run_evals.py --self-test
 python evals\production-delivery-orchestrator\run_evals.py --report-prefix latest
 ```
 
-默认基线直接读取 Git 提交 `b3d9a17` 中已发布的技能，不需要检出旧版本。评测会检查 frontmatter、触发边界、渐进披露、模糊请求侦察、权限、验证诚实性、独立审查、工作区保护和默认上下文代理，并生成 JSON 与 Markdown 报告。场景表只标记 `COVERED/UNCOVERED` 的静态规则映射，不会把未执行的 prompt 写成 PASS；`cases.yaml` 的 `must/must_not` 目前是设计规格，不代表 19 个场景都已由真实 Agent 逐项执行。
+默认基线直接读取 Git 提交 `b3d9a17` 中已发布的技能，不需要检出旧版本。默认模式要求当前 checkout 的 Git 历史能解析该提交；浅克隆或 GitHub Source archive 会在评测开始前以 exit `2` 给出恢复说明。请获取包含该提交的历史，或显式传入 `--baseline <skill-dir-or-SKILL.md>`；后者保留 candidate/known-bad 比较门，不会静默把当前候选当作 baseline。完整可机读前提见 [`docs/support-matrix.json`](docs/support-matrix.json)。评测会检查 frontmatter、触发边界、渐进披露、模糊请求侦察、权限、验证诚实性、独立审查、工作区保护和默认上下文代理，并生成 JSON 与 Markdown 报告。场景表只标记 `COVERED/UNCOVERED` 的静态规则映射，不会把未执行的 prompt 写成 PASS；`cases.yaml` 的 `must/must_not` 目前是设计规格，不代表 19 个场景都已由真实 Agent 逐项执行。
 
 故意使用已知坏候选时，runner 应返回非零退出：
 

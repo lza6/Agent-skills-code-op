@@ -1,5 +1,27 @@
 # Workflow Status
 
+## 当前终局审计与可复用交付工作流（2026-07-18，基线 `b15df30`）
+
+- 目标：针对当前单技能分发、安装、评测与 Release 系统做一次风险驱动终局审计；
+  修复可复现缺口，补齐 Spec Kit、需求追踪、测试证据、HTML 交接报告和可复用工作流。
+- 范围边界：本仓库没有前端、后端 API、数据库、容器或 SaaS 业务面；这些检查项为
+  `not_applicable`，不能机械地转换成缺陷。真实 Agent CLI、模型额度和外部 OAuth
+  仍须有可用测试账户/凭证，不能由离线评测替代。
+- 主线程是本文件、规格、整合修复和文档的唯一写入者；并行子代理仅做只读发现或拥有
+  不重叠文件。每次修复后必须由独立只读 Critic 复验。
+
+| ID | 节点 | 状态 | 依赖 | 验收与证据 |
+|---|---|---|---|---|
+| A1 | 技能/工具真实盘点 | passed | - | 本地 Codex/Agents/Claude 三根已存在所列技能，唯 `composio-connect` 缺失；`specify 0.12.16`、Codex、Claude、npx、gh 已实测。 |
+| A2 | Spec Kit 与持久计划 | passed | A1 | `.specify/`、constitution、`task_plan.md`、`findings.md`、`progress.md` 与 `specs/001-production-audit/` 规格/计划/任务图已建立，并切换到同名 feature branch。 |
+| A3 | 需求追踪矩阵与反向审计 | passed | A2 | 每项用户需求已映射到实现、测试、文档、外部阻塞或 `not_applicable` 依据；Spec Kit 只读分析修正了分支、浏览器测验和逐技能调用缺口。 |
+| A4 | 事实漂移与文档边界修复 | passed | A3 | `CONCERNS.md` 事务事实、历史 review 锚点和 support matrix 均由 current-state 19/19 回归保护。 |
+| A5 | Windows/浅克隆兼容性修复 | passed | A3 | 安装器中文帮助 UTF-8 和 eval history preflight/diagnostic 均由 installer/evaluator 回归覆盖。 |
+| A6 | 外部能力受控验证 | passed_with_boundary | A1,A2 | 已逐项调用/分类；Understand Anything 已安装/构建但 `.ua` 图谱被 Windows sandbox `os error 206` 阻断；补充的本机 CodeGraph 已实际索引 27 文件、773 nodes、1,286 edges 并完成符号查询，二者均未被夸大为行为验证。 |
+| A7 | 全量适用验证和交接材料 | passed | A4,A5,A6 | 适用 suites、registry/inventory、local release build/verify、threat model、HTML 报告及真实浏览器 quiz journey 均有新鲜证据。 |
+| A8 | 真实三 CLI 行为矩阵 | external_blocked | A7 | Codex 当前 3/3 PASS；Claude 无可用模型、Gemini 无隔离凭证。只有受控账户三案例通过才能关闭。 |
+| A9 | 独立 Critic 修复复验和发布 | in_progress | A7 | `reviews/production-audit-closure-review-2026-07-18.md` 已由同一只读 Critic 复验 Approve；下一步仅提交/push 本轮 tracked diff，等待双 OS CI。稳定 tag 另行按版本流程处理。 |
+
 ## 当前持续治理与隔离 CLI 验收（2026-07-18，基线 `290bdc4`）
 
 - 目标：把对标路线图中仍未关闭的“当前事实、可重建 registry/inventory、全仓凭证扫描、coverage 审计、真实 CLI 显式认证”落地为可复跑门；不重写 `v1.6.0` tag 或把无凭证预检描述成 Agent 行为。

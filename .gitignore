@@ -7,3 +7,8 @@ dist/
 .trace-coverage-review/
 .evidence/
 .release-candidate/
+
+# Local-only code intelligence and audit outputs.
+.codegraph/
+.matrix-audit/
+.release-audit/
