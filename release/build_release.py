@@ -28,6 +28,11 @@ IGNORED_FILES = {".DS_Store"}
 IGNORED_SUFFIXES = {".pyc"}
 SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 SOURCE_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+MAX_ZIP_MEMBERS = 1_000
+MAX_ZIP_MEMBER_UNCOMPRESSED_SIZE = 16 * 1024 * 1024
+MAX_ZIP_TOTAL_UNCOMPRESSED_SIZE = 64 * 1024 * 1024
+MAX_ZIP_COMPRESSION_RATIO = 100
+ZIP_READ_CHUNK_SIZE = 128 * 1024
 
 
 def configure_utf8_stdio() -> None:
@@ -154,17 +159,25 @@ def canonical_content(content: bytes) -> tuple[bytes, bytes]:
     return TEXT_KIND, text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
 
 
+def update_canonical_artifact_digest(
+    digest: Any,
+    relative_path: str,
+    raw_content: bytes,
+) -> None:
+    path_bytes = relative_path.encode("utf-8")
+    kind, content = canonical_content(raw_content)
+    digest.update(len(path_bytes).to_bytes(8, byteorder="big"))
+    digest.update(path_bytes)
+    digest.update(kind)
+    digest.update(len(content).to_bytes(8, byteorder="big"))
+    digest.update(content)
+
+
 def canonical_artifact_sha256(files: Iterable[tuple[str, bytes]]) -> str:
     digest = hashlib.sha256()
     digest.update(ARTIFACT_DOMAIN)
     for relative_path, raw_content in files:
-        path_bytes = relative_path.encode("utf-8")
-        kind, content = canonical_content(raw_content)
-        digest.update(len(path_bytes).to_bytes(8, byteorder="big"))
-        digest.update(path_bytes)
-        digest.update(kind)
-        digest.update(len(content).to_bytes(8, byteorder="big"))
-        digest.update(content)
+        update_canonical_artifact_digest(digest, relative_path, raw_content)
     return digest.hexdigest()
 
 
@@ -321,6 +334,53 @@ def parse_checksums(path: Path) -> dict[str, str]:
     return entries
 
 
+def validate_zip_resource_limits(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+    members = archive.infolist()
+    if len(members) > MAX_ZIP_MEMBERS:
+        raise RuntimeError("ZIP 成员数量超过限制")
+
+    total_uncompressed_size = 0
+    for member in members:
+        uncompressed_size = member.file_size
+        compressed_size = member.compress_size
+        if uncompressed_size < 0 or compressed_size < 0:
+            raise RuntimeError(f"ZIP 成员大小无效：{member.filename}")
+        if uncompressed_size > MAX_ZIP_MEMBER_UNCOMPRESSED_SIZE:
+            raise RuntimeError(f"ZIP 成员未压缩大小超过限制：{member.filename}")
+        total_uncompressed_size += uncompressed_size
+        if total_uncompressed_size > MAX_ZIP_TOTAL_UNCOMPRESSED_SIZE:
+            raise RuntimeError("ZIP 总未压缩大小超过限制")
+        if uncompressed_size and (
+            compressed_size == 0
+            or uncompressed_size > compressed_size * MAX_ZIP_COMPRESSION_RATIO
+        ):
+            raise RuntimeError(f"ZIP 成员压缩比超过限制：{member.filename}")
+    return members
+
+
+def read_zip_member_limited(
+    archive: zipfile.ZipFile,
+    member: zipfile.ZipInfo,
+    total_bytes_read: int,
+) -> tuple[bytes, str, int]:
+    content = bytearray()
+    raw_digest = hashlib.sha256()
+    member_bytes_read = 0
+    with archive.open(member, "r") as handle:
+        while block := handle.read(ZIP_READ_CHUNK_SIZE):
+            member_bytes_read += len(block)
+            total_bytes_read += len(block)
+            if member_bytes_read > MAX_ZIP_MEMBER_UNCOMPRESSED_SIZE:
+                raise RuntimeError(f"ZIP 成员未压缩大小超过限制：{member.filename}")
+            if total_bytes_read > MAX_ZIP_TOTAL_UNCOMPRESSED_SIZE:
+                raise RuntimeError("ZIP 总未压缩大小超过限制")
+            raw_digest.update(block)
+            content.extend(block)
+    if member_bytes_read != member.file_size:
+        raise RuntimeError(f"ZIP 成员大小与目录记录不匹配：{member.filename}")
+    return bytes(content), raw_digest.hexdigest(), total_bytes_read
+
+
 def verify_release(
     metadata: dict[str, Any],
     output_dir: Path,
@@ -369,20 +429,25 @@ def verify_release(
 
     expected_names = [f"{metadata['skill']}/{entry['path']}" for entry in files]
     with zipfile.ZipFile(paths["zip"]) as archive:
-        names_in_zip = archive.namelist()
+        members = validate_zip_resource_limits(archive)
+        names_in_zip = [member.filename for member in members]
         if names_in_zip != expected_names or len(set(names_in_zip)) != len(names_in_zip):
             raise RuntimeError("ZIP 成员与 provenance manifest 不一致")
-        hash_inputs: list[tuple[str, bytes]] = []
-        for entry, zip_name in zip(files, names_in_zip, strict=True):
+        canonical_digest = hashlib.sha256()
+        canonical_digest.update(ARTIFACT_DOMAIN)
+        total_bytes_read = 0
+        for entry, member in zip(files, members, strict=True):
             if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
                 raise RuntimeError("provenance manifest 项无效")
-            content = archive.read(zip_name)
+            content, raw_sha256, total_bytes_read = read_zip_member_limited(
+                archive, member, total_bytes_read
+            )
             if entry.get("size") != len(content):
-                raise RuntimeError(f"ZIP 文件大小不匹配：{zip_name}")
-            if entry.get("raw_sha256") != hashlib.sha256(content).hexdigest():
-                raise RuntimeError(f"ZIP 文件哈希不匹配：{zip_name}")
-            hash_inputs.append((entry["path"], content))
-    if artifact.get("canonical_sha256") != canonical_artifact_sha256(hash_inputs):
+                raise RuntimeError(f"ZIP 文件大小不匹配：{member.filename}")
+            if entry.get("raw_sha256") != raw_sha256:
+                raise RuntimeError(f"ZIP 文件哈希不匹配：{member.filename}")
+            update_canonical_artifact_digest(canonical_digest, entry["path"], content)
+    if artifact.get("canonical_sha256") != canonical_digest.hexdigest():
         raise RuntimeError("ZIP canonical artifact hash 不匹配")
 
 

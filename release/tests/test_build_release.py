@@ -5,7 +5,9 @@ import json
 import shutil
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -96,6 +98,89 @@ class ReleaseBuilderTest(unittest.TestCase):
                         self.builder.verify_release(
                             self.metadata, output, METADATA_PATH, TEST_COMMIT
                         )
+
+    def test_verifier_rejects_zip_resource_limits_after_checksum_rewrite(self) -> None:
+        cases = (
+            ("too-many-members", "ZIP 成员数量超过限制", "MAX_ZIP_MEMBERS", 2),
+            (
+                "single-member-size",
+                "ZIP 成员未压缩大小超过限制",
+                "MAX_ZIP_MEMBER_UNCOMPRESSED_SIZE",
+                10,
+            ),
+            (
+                "total-size",
+                "ZIP 总未压缩大小超过限制",
+                "MAX_ZIP_TOTAL_UNCOMPRESSED_SIZE",
+                10,
+            ),
+            (
+                "suspicious-compression",
+                "ZIP 成员压缩比超过限制",
+                "MAX_ZIP_COMPRESSION_RATIO",
+                2,
+            ),
+        )
+        with tempfile.TemporaryDirectory(prefix="pdo-zip-limits-") as temp:
+            root = Path(temp)
+            for case, expected_error, limit_name, limit_value in cases:
+                with self.subTest(case=case):
+                    output = root / case
+                    assets = self.builder.build_release(
+                        self.metadata, SKILL_DIR, output, TEST_COMMIT, METADATA_PATH
+                    )
+                    with patch.object(self.builder, limit_name, limit_value):
+                        with zipfile.ZipFile(
+                            assets["zip"], "w", compression=zipfile.ZIP_STORED
+                        ) as archive:
+                            if case == "too-many-members":
+                                for index in range(limit_value + 1):
+                                    archive.writestr(
+                                        f"{self.metadata['skill']}/member-{index}.txt", b"x"
+                                    )
+                            elif case == "single-member-size":
+                                archive.writestr(
+                                    f"{self.metadata['skill']}/large.bin", b"x" * 11
+                                )
+                            elif case == "total-size":
+                                for index in range(3):
+                                    archive.writestr(
+                                        f"{self.metadata['skill']}/part-{index}.bin", b"x" * 4
+                                    )
+                            else:
+                                archive.writestr(
+                                    f"{self.metadata['skill']}/compressible.bin",
+                                    b"\0" * 1024,
+                                    compress_type=zipfile.ZIP_DEFLATED,
+                                )
+                        assets["checksums"].write_text(
+                            f"{self.builder.sha256_file(assets['zip'])} *{assets['zip'].name}\n"
+                            f"{self.builder.sha256_file(assets['provenance'])} *{assets['provenance'].name}\n",
+                            encoding="utf-8",
+                            newline="\n",
+                        )
+                        with self.assertRaisesRegex(RuntimeError, expected_error):
+                            self.builder.verify_release(self.metadata, output)
+
+    def test_verifier_reads_zip_members_in_bounded_chunks(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="pdo-zip-chunked-read-") as temp:
+            assets = self.builder.build_release(
+                self.metadata, SKILL_DIR, Path(temp), TEST_COMMIT, METADATA_PATH
+            )
+            original_read = zipfile.ZipExtFile.read
+            requested_sizes: list[int] = []
+
+            def tracked_read(handle: zipfile.ZipExtFile, size: int = -1) -> bytes:
+                requested_sizes.append(size)
+                return original_read(handle, size)
+
+            with patch.object(zipfile.ZipExtFile, "read", new=tracked_read):
+                self.builder.verify_release(self.metadata, assets["zip"].parent)
+
+            self.assertTrue(requested_sizes)
+            self.assertTrue(
+                all(size == self.builder.ZIP_READ_CHUNK_SIZE for size in requested_sizes)
+            )
 
     def test_metadata_rejects_non_release_semver_and_missing_attestation(self) -> None:
         broken = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
